@@ -48,7 +48,7 @@ struct Note: Identifiable, Equatable {
         return String(stripped.prefix(48))
     }
 
-    private static let headerMarker = try! Regex("^#{1,6}[ \\t]+")
+    private static let headerMarker = /^#{1,6}[ \t]+/
 }
 
 struct NotesSnapshot: Equatable {
