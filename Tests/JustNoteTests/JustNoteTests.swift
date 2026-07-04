@@ -159,6 +159,23 @@ final class JustNoteTests: XCTestCase {
         XCTAssertEqual(model.unpinnedNotes.map(\.id), [duplicate.id])
     }
 
+    func testDuplicateNoteCopiesSpecificNonSelectedNote() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        let firstID = try XCTUnwrap(model.selectedNoteID)
+        model.updateSelectedBody("Template\n- keep this")
+        model.createNote()
+        let secondID = try XCTUnwrap(model.selectedNoteID)
+        model.updateSelectedBody("Second")
+
+        model.duplicateNote(firstID)
+
+        let duplicate = try XCTUnwrap(model.selectedNote)
+        XCTAssertNotEqual(duplicate.id, firstID)
+        XCTAssertNotEqual(duplicate.id, secondID)
+        XCTAssertEqual(duplicate.body, "Template\n- keep this")
+        XCTAssertEqual(try XCTUnwrap(model.notes.first { $0.id == secondID }).body, "Second")
+    }
+
     func testMovingNotesPersistsWithinPinnedAndUnpinnedSections() throws {
         let model = AppModel(store: try NoteStore(rootURL: rootURL))
         let firstID = try XCTUnwrap(model.selectedNoteID)
