@@ -52,11 +52,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Opens the Settings scene. The app must be `.regular` first, or the window won't come
     /// forward from an accessory app; the send is deferred one runloop hop so the policy flip
-    /// settles before AppKit routes `showSettingsWindow:`.
+    /// settles before AppKit routes `showSettingsWindow:`. If no window actually opens (the
+    /// selector is private and has been renamed across releases), don't strand the app with a
+    /// Dock icon and no window — revert to `.accessory`.
     func openSettings() {
         prepareToShowWindow()
         DispatchQueue.main.async {
             NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            DispatchQueue.main.async {
+                if !self.hasTitledWindow {
+                    NSApp.setActivationPolicy(.accessory)
+                }
+            }
         }
     }
 

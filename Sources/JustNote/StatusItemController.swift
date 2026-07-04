@@ -31,11 +31,13 @@ final class StatusItemController: NSObject {
     }
 
     private func buildMenu() {
-        let settings = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        // No key equivalents: this menu isn't installed in the main menu bar, so any shortcut
+        // shown here would be live only while the menu is open — misleading as a "global" hint.
+        let settings = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: "")
         settings.target = self
         menu.addItem(settings)
         menu.addItem(.separator())
-        let quit = NSMenuItem(title: "Quit JustNote", action: #selector(quit), keyEquivalent: "q")
+        let quit = NSMenuItem(title: "Quit JustNote", action: #selector(quit), keyEquivalent: "")
         quit.target = self
         menu.addItem(quit)
     }
