@@ -8,8 +8,21 @@ struct JustNoteApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
+        // Placeholder scene: all real UI is AppKit-managed (the status-item popover and, for
+        // settings, an AppKit window). A SwiftUI `Settings` scene does not materialize a window
+        // when opened from this accessory app on macOS 27 (the `showSettingsWindow:` action
+        // reports handled but no window appears), so the app-settings command is rerouted to the
+        // AppKit settings window instead.
         Settings {
-            SettingsView()
+            EmptyView()
+        }
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") {
+                    AppDelegate.shared?.openSettings()
+                }
+                .keyboardShortcut(",", modifiers: .command)
+            }
         }
     }
 }
@@ -29,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var isQuitting = false
     private(set) var statusItemController: StatusItemController!
     private var model: AppModel!
+    private var settingsWindow: NSWindow?
 
     override init() {
         super.init()
@@ -50,23 +64,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    /// Opens the Settings scene. The app must be `.regular` first, or the window won't come
-    /// forward from an accessory app; the send is deferred one runloop hop so the policy flip
-    /// settles before AppKit routes `showSettingsWindow:`. If no window actually opens (the
-    /// selector is private and has been renamed across releases), don't strand the app with a
-    /// Dock icon and no window — revert to `.accessory`.
+    /// Opens the settings window, creating it once and reusing it thereafter. Flips to `.regular`
+    /// first so the window (and a Dock icon) come forward from an accessory app; `windowWillClose`
+    /// returns to `.accessory` when it's closed. Settings is hosted in an AppKit window because the
+    /// SwiftUI `Settings` scene won't open programmatically from an accessory app here.
     @MainActor
     func openSettings() {
         statusItemController?.closePopover()
         prepareToShowWindow()
-        DispatchQueue.main.async {
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-            DispatchQueue.main.async {
-                if !self.hasTitledWindow {
-                    NSApp.setActivationPolicy(.accessory)
-                }
-            }
+        if settingsWindow == nil {
+            let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView()))
+            window.title = "JustNote Settings"
+            window.styleMask = [.titled, .closable]
+            window.isReleasedWhenClosed = false
+            window.center()
+            settingsWindow = window
         }
+        settingsWindow?.makeKeyAndOrderFront(nil)
     }
 
     /// Return to menu-bar-only once the Settings window closes. `willCloseNotification` fires
