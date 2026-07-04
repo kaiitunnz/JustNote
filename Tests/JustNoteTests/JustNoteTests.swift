@@ -97,17 +97,6 @@ final class JustNoteTests: XCTestCase {
         XCTAssertEqual(model.selectedNoteID, only)
     }
 
-    func testSelectingNotesUpdatesRecentOrder() throws {
-        let model = AppModel(store: try NoteStore(rootURL: rootURL))
-        let firstID = try XCTUnwrap(model.selectedNoteID)
-        model.createNote()
-        let secondID = try XCTUnwrap(model.selectedNoteID)
-
-        model.select(firstID)
-
-        XCTAssertEqual(model.recentNoteIDs.prefix(2), [firstID, secondID])
-    }
-
     func testPinningPersistsAndSortsPinnedFirst() throws {
         let model = AppModel(store: try NoteStore(rootURL: rootURL))
         let firstID = try XCTUnwrap(model.selectedNoteID)
@@ -175,7 +164,6 @@ final class JustNoteTests: XCTestCase {
 
         XCTAssertTrue(model.notes.isEmpty)
         XCTAssertNil(model.selectedNoteID)
-        XCTAssertTrue(model.recentNoteIDs.isEmpty)
 
         let reloaded = AppModel(store: try NoteStore(rootURL: rootURL))
         XCTAssertTrue(reloaded.notes.isEmpty)

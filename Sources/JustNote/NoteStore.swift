@@ -33,7 +33,7 @@ final class NoteStore {
 
     func load() throws -> NotesSnapshot {
         guard fileManager.fileExists(atPath: stateURL.path) else {
-            return NotesSnapshot(notes: [], selectedNoteID: nil, recentNoteIDs: [], isFresh: true)
+            return NotesSnapshot(notes: [], selectedNoteID: nil, isFresh: true)
         }
         let data = try Data(contentsOf: stateURL)
         let state = try JSONDecoder().decode(PersistedState.self, from: data)
@@ -52,7 +52,6 @@ final class NoteStore {
         return NotesSnapshot(
             notes: notes,
             selectedNoteID: state.selectedNoteID.flatMap { noteIDs.contains($0) ? $0 : nil },
-            recentNoteIDs: state.recentNoteIDs.filter { noteIDs.contains($0) },
             noteOrderIDs: sanitizedOrder(state.noteOrderIDs ?? [], noteIDs: noteIDs, notes: notes),
             isFresh: false
         )
@@ -64,7 +63,6 @@ final class NoteStore {
         let state = PersistedState(
             notes: snapshot.notes.map { NoteMetadata(note: $0) },
             selectedNoteID: snapshot.selectedNoteID.flatMap { noteIDs.contains($0) ? $0 : nil },
-            recentNoteIDs: snapshot.recentNoteIDs.filter { noteIDs.contains($0) },
             noteOrderIDs: sanitizedOrder(snapshot.noteOrderIDs, noteIDs: noteIDs, notes: snapshot.notes)
         )
 
@@ -129,7 +127,6 @@ final class NoteStore {
 private struct PersistedState: Codable {
     var notes: [NoteMetadata]
     var selectedNoteID: UUID?
-    var recentNoteIDs: [UUID]
     var noteOrderIDs: [UUID]?
 }
 

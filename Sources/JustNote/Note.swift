@@ -54,7 +54,6 @@ struct Note: Identifiable, Equatable {
 struct NotesSnapshot: Equatable {
     var notes: [Note]
     var selectedNoteID: UUID?
-    var recentNoteIDs: [UUID]
     var noteOrderIDs: [UUID] = []
     var isFresh: Bool = false
 }

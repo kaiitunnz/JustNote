@@ -112,33 +112,6 @@ struct MenuView: View {
                 .padding(.vertical, 2)
             }
             .scrollIndicators(.hidden)
-
-            if !model.recentNotes.isEmpty {
-                VStack(alignment: .leading, spacing: 7) {
-                    Text("RECENT")
-                        .font(Theme.rounded(10, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                    ForEach(model.recentNotes.prefix(4)) { note in
-                        Button {
-                            model.select(note.id)
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: note.pinned ? "pin.fill" : "clock")
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundStyle(note.pinned ? Theme.pinned : Color.secondary.opacity(0.7))
-                                Text(note.title)
-                                    .font(.system(size: 11))
-                                    .lineLimit(1)
-                                Spacer(minLength: 0)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(10)
-                .contentSurface(cornerRadius: Theme.innerCorner)
-            }
         }
         .padding(12)
     }

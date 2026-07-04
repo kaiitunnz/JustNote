@@ -6,7 +6,6 @@ import SwiftUI
 final class AppModel: ObservableObject {
     @Published private(set) var notes: [Note]
     @Published private(set) var selectedNoteID: UUID?
-    @Published private(set) var recentNoteIDs: [UUID]
     @Published private(set) var noteOrderIDs: [UUID]
     @Published var lastError: String?
 
@@ -21,14 +20,13 @@ final class AppModel: ObservableObject {
             snapshot = try resolvedStore.load()
         } catch {
             resolvedStore = try! NoteStore(rootURL: FileManager.default.temporaryDirectory.appendingPathComponent("JustNoteFallback"))
-            snapshot = NotesSnapshot(notes: [], selectedNoteID: nil, recentNoteIDs: [], isFresh: true)
+            snapshot = NotesSnapshot(notes: [], selectedNoteID: nil, isFresh: true)
             loadError = error.localizedDescription
         }
 
         self.store = resolvedStore
         notes = snapshot.notes
         selectedNoteID = snapshot.selectedNoteID
-        recentNoteIDs = snapshot.recentNoteIDs
         noteOrderIDs = Self.sanitizedOrder(snapshot.noteOrderIDs, notes: snapshot.notes)
         lastError = loadError
 
@@ -36,7 +34,6 @@ final class AppModel: ObservableObject {
             createNote()
         } else if selectedNoteID == nil {
             selectedNoteID = orderedNotes.first?.id
-            if let selectedNoteID { touchRecent(selectedNoteID) }
             save()
         }
     }
@@ -58,11 +55,6 @@ final class AppModel: ObservableObject {
         orderedNotes(pinned: false)
     }
 
-    var recentNotes: [Note] {
-        let byID = Dictionary(uniqueKeysWithValues: notes.map { ($0.id, $0) })
-        return recentNoteIDs.compactMap { byID[$0] }
-    }
-
     var storagePath: String {
         store.rootURL.path
     }
@@ -77,26 +69,20 @@ final class AppModel: ObservableObject {
         notes.append(note)
         noteOrderIDs.insert(note.id, at: firstUnpinnedOrderIndex)
         selectedNoteID = note.id
-        touchRecent(note.id)
         save()
     }
 
     func deleteSelectedNote() {
         guard let selectedNoteID else { return }
         notes.removeAll { $0.id == selectedNoteID }
-        recentNoteIDs.removeAll { $0 == selectedNoteID }
         noteOrderIDs.removeAll { $0 == selectedNoteID }
         self.selectedNoteID = orderedNotes.first?.id
-        if let next = self.selectedNoteID {
-            touchRecent(next)
-        }
         save()
     }
 
     func select(_ noteID: UUID) {
         guard notes.contains(where: { $0.id == noteID }) else { return }
         selectedNoteID = noteID
-        touchRecent(noteID)
         save()
     }
 
@@ -128,7 +114,6 @@ final class AppModel: ObservableObject {
         guard notes[index].body != body else { return }
         notes[index].body = body
         notes[index].updatedAt = Date()
-        touchRecent(selectedNoteID)
         save()
     }
 
@@ -219,13 +204,6 @@ final class AppModel: ObservableObject {
         )
     }
 
-    private func touchRecent(_ noteID: UUID) {
-        recentNoteIDs.removeAll { $0 == noteID }
-        recentNoteIDs.insert(noteID, at: 0)
-        let validIDs = Set(notes.map(\.id))
-        recentNoteIDs = Array(recentNoteIDs.filter { validIDs.contains($0) }.prefix(8))
-    }
-
     private func orderedNotes(pinned: Bool) -> [Note] {
         let byID = Dictionary(uniqueKeysWithValues: notes.map { ($0.id, $0) })
         return noteOrderIDs.compactMap { byID[$0] }.filter { $0.pinned == pinned }
@@ -248,7 +226,7 @@ final class AppModel: ObservableObject {
 
     private func save() {
         do {
-            try store.save(NotesSnapshot(notes: notes, selectedNoteID: selectedNoteID, recentNoteIDs: recentNoteIDs, noteOrderIDs: noteOrderIDs))
+            try store.save(NotesSnapshot(notes: notes, selectedNoteID: selectedNoteID, noteOrderIDs: noteOrderIDs))
             lastError = nil
         } catch {
             lastError = "Save failed: \(error.localizedDescription)"
