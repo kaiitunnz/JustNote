@@ -251,6 +251,15 @@ struct MenuView: View {
             .help("Reveal storage in Finder")
             Spacer()
             Button {
+                AppDelegate.shared?.openSettings()
+            } label: {
+                Label("Settings", systemImage: "gearshape")
+                    .font(.system(size: 11))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .help("Settings")
+            Button {
                 showingUninstallConfirmation = true
             } label: {
                 Label("Uninstall", systemImage: "trash")
