@@ -101,7 +101,6 @@ struct MenuView: View {
                     noteSection("NOTES", notes: model.unpinnedNotes, pinned: false)
                 }
                 .padding(.vertical, 2)
-                .padding(.trailing, 10)
             }
 
             if !model.recentNotes.isEmpty {

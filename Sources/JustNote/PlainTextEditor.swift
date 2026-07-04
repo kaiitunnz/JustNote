@@ -46,6 +46,13 @@ struct PlainTextEditor: NSViewRepresentable {
             textView.selectedRanges = selectedRanges
         }
         configure(textView: textView, in: scrollView)
+
+        if context.coordinator.previousWrapsLines != wrapsLines {
+            context.coordinator.previousWrapsLines = wrapsLines
+            textView.sizeToFit()
+            let currentY = scrollView.contentView.bounds.origin.y
+            scrollView.contentView.scroll(to: NSPoint(x: 0, y: currentY))
+        }
     }
 
     private func configure(textView: NSTextView, in scrollView: NSScrollView) {
@@ -74,6 +81,7 @@ struct PlainTextEditor: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var text: Binding<String>
+        var previousWrapsLines: Bool?
 
         init(text: Binding<String>) {
             self.text = text
