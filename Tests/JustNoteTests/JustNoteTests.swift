@@ -50,6 +50,25 @@ final class JustNoteTests: XCTestCase {
         XCTAssertEqual(Note.title(from: "Plain title"), "Plain title")
     }
 
+    func testSelectAdjacentNoteWrapsAround() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        model.createNote()
+        model.createNote()
+        let order = model.orderedNotes.map(\.id)
+        XCTAssertEqual(order.count, 3)
+
+        model.select(order[0])
+        model.selectAdjacentNote(offset: 1)
+        XCTAssertEqual(model.selectedNoteID, order[1])
+        model.selectAdjacentNote(offset: 1)
+        XCTAssertEqual(model.selectedNoteID, order[2])
+        model.selectAdjacentNote(offset: 1)
+        XCTAssertEqual(model.selectedNoteID, order[0])
+
+        model.selectAdjacentNote(offset: -1)
+        XCTAssertEqual(model.selectedNoteID, order[2])
+    }
+
     func testSelectingNotesUpdatesRecentOrder() throws {
         let model = AppModel(store: try NoteStore(rootURL: rootURL))
         let firstID = try XCTUnwrap(model.selectedNoteID)

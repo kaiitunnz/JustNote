@@ -100,6 +100,17 @@ final class AppModel: ObservableObject {
         save()
     }
 
+    func selectAdjacentNote(offset: Int) {
+        let ordered = orderedNotes
+        guard !ordered.isEmpty else { return }
+        guard let current = selectedNoteID, let index = ordered.firstIndex(where: { $0.id == current }) else {
+            select(ordered[0].id)
+            return
+        }
+        let next = (index + offset % ordered.count + ordered.count) % ordered.count
+        select(ordered[next].id)
+    }
+
     func updateSelectedBody(_ body: String) {
         guard let selectedNoteID, let index = notes.firstIndex(where: { $0.id == selectedNoteID }) else { return }
         guard notes[index].body != body else { return }
