@@ -100,15 +100,21 @@ final class AppModel: ObservableObject {
         save()
     }
 
-    func selectAdjacentNote(offset: Int) {
+    /// Moves the selection by `offset` through the visible order, wrapping around.
+    /// Returns `true` when the move wrapped past an end (last → first or first → last).
+    @discardableResult
+    func selectAdjacentNote(offset: Int) -> Bool {
         let ordered = orderedNotes
-        guard !ordered.isEmpty else { return }
+        guard ordered.count > 1 else { return false }
         guard let current = selectedNoteID, let index = ordered.firstIndex(where: { $0.id == current }) else {
             select(ordered[0].id)
-            return
+            return false
         }
-        let next = (index + offset % ordered.count + ordered.count) % ordered.count
+        let target = index + offset
+        let wrapped = target < 0 || target >= ordered.count
+        let next = (target % ordered.count + ordered.count) % ordered.count
         select(ordered[next].id)
+        return wrapped
     }
 
     func updateSelectedBody(_ body: String) {

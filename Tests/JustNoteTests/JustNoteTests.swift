@@ -58,14 +58,14 @@ final class JustNoteTests: XCTestCase {
         XCTAssertEqual(order.count, 3)
 
         model.select(order[0])
-        model.selectAdjacentNote(offset: 1)
+        XCTAssertFalse(model.selectAdjacentNote(offset: 1))
         XCTAssertEqual(model.selectedNoteID, order[1])
-        model.selectAdjacentNote(offset: 1)
+        XCTAssertFalse(model.selectAdjacentNote(offset: 1))
         XCTAssertEqual(model.selectedNoteID, order[2])
-        model.selectAdjacentNote(offset: 1)
+        XCTAssertTrue(model.selectAdjacentNote(offset: 1))
         XCTAssertEqual(model.selectedNoteID, order[0])
 
-        model.selectAdjacentNote(offset: -1)
+        XCTAssertTrue(model.selectAdjacentNote(offset: -1))
         XCTAssertEqual(model.selectedNoteID, order[2])
     }
 

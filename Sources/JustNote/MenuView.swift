@@ -12,6 +12,8 @@ struct MenuView: View {
     @State private var showingUninstallConfirmation = false
     @State private var draggingNoteID: UUID?
     @State private var splitDragStartWidth: Double?
+    @State private var wrapMessage: String?
+    @State private var wrapToken = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,6 +34,7 @@ struct MenuView: View {
         }
         .frame(width: Theme.panelWidth, height: Theme.panelHeight)
         .background { navigationShortcuts }
+        .overlay(alignment: .center) { wrapIndicator }
         .tint(Theme.accent)
         .containerBackground(.thinMaterial, for: .window)
         .alert("Uninstall JustNote?", isPresented: $showingUninstallConfirmation) {
@@ -301,14 +304,42 @@ struct MenuView: View {
 
     private var navigationShortcuts: some View {
         Group {
-            Button("Next note") { model.selectAdjacentNote(offset: 1) }
+            Button("Next note") { cycle(1) }
                 .keyboardShortcut("]", modifiers: .command)
-            Button("Previous note") { model.selectAdjacentNote(offset: -1) }
+            Button("Previous note") { cycle(-1) }
                 .keyboardShortcut("[", modifiers: .command)
         }
         .frame(width: 0, height: 0)
         .opacity(0)
         .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private var wrapIndicator: some View {
+        if let wrapMessage {
+            Text(wrapMessage)
+                .font(.system(size: 12, weight: .semibold))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(.regularMaterial, in: Capsule())
+                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08)))
+                .shadow(color: .black.opacity(0.18), radius: 12, y: 4)
+                .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                .allowsHitTesting(false)
+        }
+    }
+
+    private func cycle(_ offset: Int) {
+        guard model.selectAdjacentNote(offset: offset) else { return }
+        wrapToken += 1
+        let token = wrapToken
+        withAnimation(.easeOut(duration: 0.15)) {
+            wrapMessage = offset > 0 ? "Looped to first note" : "Looped to last note"
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) {
+            guard wrapToken == token else { return }
+            withAnimation(.easeIn(duration: 0.35)) { wrapMessage = nil }
+        }
     }
 
     private func quit() {
