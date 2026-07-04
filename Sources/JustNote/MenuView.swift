@@ -9,40 +9,11 @@ struct MenuView: View {
     @AppStorage("wrapLines") private var wrapLines = true
     @AppStorage("previewMode") private var isPreviewing = false
     @AppStorage("sidebarCollapsed") private var sidebarCollapsed = false
-    @State private var pendingConfirmation: Confirmation?
+    @State private var showingUninstallConfirmation = false
     @State private var draggingNoteID: UUID?
     @State private var splitDragStartWidth: Double?
     @State private var wrapIcon: String?
     @State private var wrapToken = 0
-
-    private var isShowingConfirmation: Binding<Bool> {
-        Binding(
-            get: { pendingConfirmation != nil },
-            set: { if !$0 { pendingConfirmation = nil } }
-        )
-    }
-
-    private var confirmationTitle: String {
-        switch pendingConfirmation {
-        case .deleteNote:
-            "Delete note?"
-        case .uninstall:
-            "Uninstall JustNote?"
-        case nil:
-            ""
-        }
-    }
-
-    private var confirmationMessage: String {
-        switch pendingConfirmation {
-        case .deleteNote:
-            "This cannot be undone."
-        case .uninstall:
-            "This removes ~/Library/Application Support/JustNote, moves the app bundle to the Trash, and quits JustNote."
-        case nil:
-            ""
-        }
-    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -66,16 +37,11 @@ struct MenuView: View {
         .overlay(alignment: .center) { wrapIndicator }
         .tint(Theme.accent)
         .containerBackground(.thinMaterial, for: .window)
-        .alert(confirmationTitle, isPresented: isShowingConfirmation) {
+        .alert("Uninstall JustNote?", isPresented: $showingUninstallConfirmation) {
             Button("Cancel", role: .cancel) {}
-            if pendingConfirmation == .deleteNote {
-                Button("Delete", role: .destructive, action: confirmDeleteSelectedNote)
-            }
-            if pendingConfirmation == .uninstall {
-                Button("Uninstall", role: .destructive, action: model.uninstallAndQuit)
-            }
+            Button("Uninstall", role: .destructive, action: model.uninstallAndQuit)
         } message: {
-            Text(confirmationMessage)
+            Text("This removes ~/Library/Application Support/JustNote, moves the app bundle to the Trash, and quits JustNote.")
         }
     }
 
@@ -294,7 +260,7 @@ struct MenuView: View {
             .foregroundStyle(.secondary)
             .help("Settings")
             Button {
-                pendingConfirmation = .uninstall
+                showingUninstallConfirmation = true
             } label: {
                 Label("Uninstall", systemImage: "trash")
                     .font(.system(size: 11))
@@ -318,15 +284,18 @@ struct MenuView: View {
     }
 
     private func requestDeleteSelectedNote() {
-        guard model.selectedNote != nil else { return }
-        pendingConfirmation = .deleteNote
-    }
-
-    private func confirmDeleteSelectedNote() {
-        pendingConfirmation = nil
-        DispatchQueue.main.async {
-            model.deleteSelectedNote()
-        }
+        guard let note = model.selectedNote else { return }
+        let alert = NSAlert()
+        alert.messageText = "Delete note?"
+        alert.informativeText = "Delete \"\(note.title)\"? This cannot be undone."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Delete")
+        alert.addButton(withTitle: "Cancel")
+        let response = AppDelegate.shared?.statusItemController.withDismissHandlersSuspended {
+            alert.runModal()
+        } ?? alert.runModal()
+        guard response == .alertFirstButtonReturn else { return }
+        model.deleteSelectedNote()
     }
 
     private func toggleSidebar() {
@@ -426,11 +395,6 @@ struct MenuView: View {
                 splitDragStartWidth = nil
             }
     }
-}
-
-private enum Confirmation {
-    case deleteNote
-    case uninstall
 }
 
 private struct Splitter: View {
