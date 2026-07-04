@@ -60,8 +60,10 @@ struct PlainTextEditor: NSViewRepresentable {
         textView.isHorizontallyResizable = !wrapsLines
         scrollView.hasHorizontalScroller = !wrapsLines
 
+        let visibleHeight = scrollView.contentSize.height
+
         if wrapsLines {
-            textView.minSize = NSSize(width: 0, height: 0)
+            textView.minSize = NSSize(width: 0, height: visibleHeight)
             textView.autoresizingMask = [.width]
             textContainer.widthTracksTextView = true
             textContainer.containerSize = NSSize(width: scrollView.contentSize.width, height: CGFloat.greatestFiniteMagnitude)
@@ -69,13 +71,19 @@ struct PlainTextEditor: NSViewRepresentable {
             frame.size.width = scrollView.contentSize.width
             textView.frame = frame
         } else {
-            textView.minSize = NSSize(width: scrollView.contentSize.width, height: 0)
+            textView.minSize = NSSize(width: scrollView.contentSize.width, height: visibleHeight)
             textView.autoresizingMask = []
             textContainer.widthTracksTextView = false
             textContainer.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
             var frame = textView.frame
             frame.size.width = max(frame.size.width, scrollView.contentSize.width)
             textView.frame = frame
+        }
+
+        // Fill the visible height so a click in the empty area below the text still lands in the
+        // text view — placing the insertion point at the end — instead of hitting dead space.
+        if textView.frame.height < visibleHeight {
+            textView.frame.size.height = visibleHeight
         }
     }
 
