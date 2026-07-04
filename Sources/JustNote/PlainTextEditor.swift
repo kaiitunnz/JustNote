@@ -16,7 +16,7 @@ struct PlainTextEditor: NSViewRepresentable {
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
 
-        let textView = NSTextView(frame: .zero)
+        let textView = EndAnchoredTextView(frame: .zero)
         textView.delegate = context.coordinator
         textView.string = text
         textView.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
@@ -99,5 +99,24 @@ struct PlainTextEditor: NSViewRepresentable {
             guard let textView = notification.object as? NSTextView else { return }
             text.wrappedValue = textView.string
         }
+    }
+}
+
+// Clicking the empty area below the text jumps straight to the end of the text, without the
+// intermediate caret placement NSTextView would otherwise show there (which reads as a flicker).
+final class EndAnchoredTextView: NSTextView {
+    override func mouseDown(with event: NSEvent) {
+        guard let layoutManager, let textContainer else {
+            super.mouseDown(with: event)
+            return
+        }
+        let point = convert(event.locationInWindow, from: nil)
+        let contentBottom = layoutManager.usedRect(for: textContainer).maxY + textContainerInset.height
+        if point.y > contentBottom {
+            window?.makeFirstResponder(self)
+            setSelectedRange(NSRange(location: (string as NSString).length, length: 0))
+            return
+        }
+        super.mouseDown(with: event)
     }
 }
