@@ -318,6 +318,7 @@ struct MenuView: View {
         if let wrapMessage {
             ZStack {
                 Color.black.opacity(0.18)
+                    .transition(.opacity)
                 VStack(spacing: 12) {
                     Image(systemName: "arrow.triangle.2.circlepath")
                         .font(.system(size: 46, weight: .semibold))
@@ -330,8 +331,8 @@ struct MenuView: View {
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
                 .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.primary.opacity(0.08)))
                 .shadow(color: .black.opacity(0.25), radius: 22, y: 8)
+                .transition(.opacity.combined(with: .scale(scale: 0.9)))
             }
-            .transition(.opacity.combined(with: .scale(scale: 0.9)))
             .allowsHitTesting(false)
         }
     }
