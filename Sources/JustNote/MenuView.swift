@@ -102,7 +102,7 @@ struct MenuView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 12) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
                     noteSection("PINNED", notes: model.pinnedNotes, pinned: true)
                     noteSection("NOTES", notes: model.unpinnedNotes, pinned: false)
                 }
@@ -228,16 +228,18 @@ struct MenuView: View {
                     if isPreviewing {
                         ScrollView {
                             MarkdownView(note.body)
+                                .textSelection(.enabled)
                                 .padding(12)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     } else {
                         PlainTextEditor(text: model.bodyBinding(), wrapsLines: wrapLines)
+                            .contentShape(Rectangle())
+                            .onTapGesture { }
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentSurface(cornerRadius: Theme.innerCorner)
-                .onTapGesture { }
             } else {
                 VStack(spacing: 12) {
                     Image(systemName: "note.text.badge.plus")
@@ -251,7 +253,9 @@ struct MenuView: View {
         }
         .padding(14)
         .background {
-            Color.clear.contentShape(Rectangle()).onTapGesture { resignTextFocus() }
+            if !isPreviewing {
+                Color.clear.contentShape(Rectangle()).onTapGesture { resignTextFocus() }
+            }
         }
     }
 
@@ -396,7 +400,7 @@ private struct SectionEndDropTarget: View {
     var body: some View {
         RoundedRectangle(cornerRadius: 4)
             .fill(Color.primary.opacity(0.001))
-            .frame(height: 12)
+            .frame(height: 6)
     }
 }
 
