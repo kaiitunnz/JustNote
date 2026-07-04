@@ -6,6 +6,9 @@ struct MenuView: View {
     @ObservedObject var model: AppModel
     @AppStorage("sidebarWidth") private var sidebarWidth = Double(Theme.sidebarWidth)
     @AppStorage("wrapLines") private var wrapLines = true
+    @AppStorage("renderingMode") private var renderingMode = "edit"
+
+    private var isPreviewing: Bool { renderingMode == "preview" }
     @State private var showingUninstallConfirmation = false
     @State private var draggingNoteID: UUID?
     @State private var splitDragStartWidth: Double?
@@ -189,20 +192,36 @@ struct MenuView: View {
                         TimestampText(date: note.updatedAt)
                     }
                     Spacer()
+                    if !isPreviewing {
+                        Button {
+                            wrapLines.toggle()
+                        } label: {
+                            Image(systemName: wrapLines ? "text.alignleft" : "arrow.left.and.right")
+                                .font(.system(size: 12, weight: .semibold))
+                        }
+                        .buttonStyle(HeaderIconButtonStyle())
+                        .help(wrapLines ? "Soft wrap is on" : "Soft wrap is off")
+                    }
                     Button {
-                        wrapLines.toggle()
+                        renderingMode = isPreviewing ? "edit" : "preview"
                     } label: {
-                        Image(systemName: wrapLines ? "text.alignleft" : "arrow.left.and.right")
+                        Image(systemName: isPreviewing ? "pencil" : "eye")
                             .font(.system(size: 12, weight: .semibold))
                     }
                     .buttonStyle(HeaderIconButtonStyle())
-                    .help(wrapLines ? "Soft wrap is on" : "Soft wrap is off")
+                    .help(isPreviewing ? "Edit note" : "Preview markdown")
                 }
 
-                PlainTextEditor(text: model.bodyBinding(), wrapsLines: wrapLines)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .contentSurface(cornerRadius: Theme.innerCorner)
-                    .onTapGesture { }
+                Group {
+                    if isPreviewing {
+                        MarkdownPreview(text: note.body)
+                    } else {
+                        PlainTextEditor(text: model.bodyBinding(), wrapsLines: wrapLines)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentSurface(cornerRadius: Theme.innerCorner)
+                .onTapGesture { }
             } else {
                 VStack(spacing: 12) {
                     Image(systemName: "note.text.badge.plus")
