@@ -191,6 +191,13 @@ struct MenuView: View {
         Divider()
 
         Button {
+            moveNote(note, pinned: pinned, toEdge: .top)
+        } label: {
+            Label("Move to Top", systemImage: "arrow.up.to.line")
+        }
+        .disabled(!canMoveNote(note, pinned: pinned, direction: -1))
+
+        Button {
             moveNote(note, pinned: pinned, direction: -1)
         } label: {
             Label("Move Up", systemImage: "arrow.up")
@@ -203,13 +210,6 @@ struct MenuView: View {
             Label("Move Down", systemImage: "arrow.down")
         }
         .disabled(!canMoveNote(note, pinned: pinned, direction: 1))
-
-        Button {
-            moveNote(note, pinned: pinned, toEdge: .top)
-        } label: {
-            Label("Move to Top", systemImage: "arrow.up.to.line")
-        }
-        .disabled(!canMoveNote(note, pinned: pinned, direction: -1))
 
         Button {
             moveNote(note, pinned: pinned, toEdge: .bottom)
