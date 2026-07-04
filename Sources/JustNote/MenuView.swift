@@ -101,8 +101,8 @@ struct MenuView: View {
                     noteSection("NOTES", notes: model.unpinnedNotes, pinned: false)
                 }
                 .padding(.vertical, 2)
-                .padding(.trailing, 5)
             }
+            .scrollIndicators(.hidden)
 
             if !model.recentNotes.isEmpty {
                 VStack(alignment: .leading, spacing: 7) {
