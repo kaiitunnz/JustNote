@@ -9,6 +9,7 @@ struct MenuView: View {
     @AppStorage("wrapLines") private var wrapLines = true
     @AppStorage("previewMode") private var isPreviewing = false
     @AppStorage("sidebarCollapsed") private var sidebarCollapsed = false
+    @State private var showingDeleteConfirmation = false
     @State private var showingUninstallConfirmation = false
     @State private var draggingNoteID: UUID?
     @State private var splitDragStartWidth: Double?
@@ -42,6 +43,12 @@ struct MenuView: View {
             Button("Uninstall", role: .destructive, action: model.uninstallAndQuit)
         } message: {
             Text("This removes ~/Library/Application Support/JustNote, moves the app bundle to the Trash, and quits JustNote.")
+        }
+        .alert("Delete note?", isPresented: $showingDeleteConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete", role: .destructive, action: model.deleteSelectedNote)
+        } message: {
+            Text("This cannot be undone.")
         }
     }
 
@@ -90,7 +97,7 @@ struct MenuView: View {
             .help("Pin note")
             .disabled(model.selectedNote == nil)
 
-            Button(action: model.deleteSelectedNote) {
+            Button(action: requestDeleteSelectedNote) {
                 Image(systemName: "trash")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.secondary)
@@ -283,6 +290,11 @@ struct MenuView: View {
         model.createNote()
     }
 
+    private func requestDeleteSelectedNote() {
+        guard model.selectedNote != nil else { return }
+        showingDeleteConfirmation = true
+    }
+
     private func toggleSidebar() {
         withAnimation(.easeInOut(duration: 0.18)) { sidebarCollapsed.toggle() }
     }
@@ -296,7 +308,7 @@ struct MenuView: View {
         Group {
             Button("New note") { createNote() }
                 .keyboardShortcut("n", modifiers: .command)
-            Button("Delete note") { model.deleteSelectedNote() }
+            Button("Delete note") { requestDeleteSelectedNote() }
                 .keyboardShortcut("d", modifiers: [.command, .shift])
                 .disabled(model.selectedNote == nil)
             Button("Pin note") { model.togglePinSelected() }
