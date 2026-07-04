@@ -1,11 +1,13 @@
 {
-  "fill" : "system-dark",
+  "fill" : "automatic",
   "groups" : [
     {
       "layers" : [
         {
-          "image-name" : "page.svg",
-          "name" : "page",
+          "glass" : true,
+          "image-name" : "lines.svg",
+          "name" : "lines",
+          "opacity" : 1,
           "position" : {
             "scale" : 1.08,
             "translation-in-points" : [
@@ -15,10 +17,8 @@
           }
         },
         {
-          "glass" : true,
-          "image-name" : "lines.svg",
-          "name" : "lines",
-          "opacity" : 1,
+          "image-name" : "page.svg",
+          "name" : "page",
           "position" : {
             "scale" : 1.08,
             "translation-in-points" : [
