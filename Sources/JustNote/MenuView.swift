@@ -3,6 +3,7 @@ import SwiftUI
 
 struct MenuView: View {
     @ObservedObject var model: AppModel
+    @State private var showingUninstallConfirmation = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -19,6 +20,12 @@ struct MenuView: View {
         .frame(width: Theme.panelWidth, height: Theme.panelHeight)
         .tint(Theme.accent)
         .containerBackground(.thinMaterial, for: .window)
+        .alert("Uninstall JustNote?", isPresented: $showingUninstallConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Uninstall", role: .destructive, action: model.uninstallAndQuit)
+        } message: {
+            Text("This removes ~/Library/Application Support/JustNote, moves the app bundle to the Trash, and quits JustNote.")
+        }
     }
 
     private var header: some View {
@@ -81,10 +88,9 @@ struct MenuView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 12) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 7) {
-                    ForEach(model.orderedNotes) { note in
-                        noteButton(note)
-                    }
+                VStack(alignment: .leading, spacing: 12) {
+                    noteSection("PINNED", notes: model.pinnedNotes, pinned: true)
+                    noteSection("NOTES", notes: model.unpinnedNotes, pinned: false)
                 }
                 .padding(.vertical, 2)
             }
@@ -120,13 +126,26 @@ struct MenuView: View {
         .frame(width: Theme.sidebarWidth)
     }
 
-    private func noteButton(_ note: Note) -> some View {
-        Button {
-            model.select(note.id)
-        } label: {
-            NoteRow(note: note, selected: note.id == model.selectedNoteID)
+    private func noteSection(_ title: String, notes: [Note], pinned: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if !notes.isEmpty {
+                Text(title)
+                    .font(Theme.rounded(10, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 2)
+                ForEach(notes) { note in
+                    NoteRow(
+                        note: note,
+                        selected: note.id == model.selectedNoteID,
+                        canMoveUp: pinned ? model.canMovePinnedNote(note.id, direction: -1) : model.canMoveUnpinnedNote(note.id, direction: -1),
+                        canMoveDown: pinned ? model.canMovePinnedNote(note.id, direction: 1) : model.canMoveUnpinnedNote(note.id, direction: 1),
+                        select: { model.select(note.id) },
+                        moveUp: { pinned ? model.movePinnedNote(note.id, direction: -1) : model.moveUnpinnedNote(note.id, direction: -1) },
+                        moveDown: { pinned ? model.movePinnedNote(note.id, direction: 1) : model.moveUnpinnedNote(note.id, direction: 1) }
+                    )
+                }
+            }
         }
-        .buttonStyle(.plain)
     }
 
     private var editor: some View {
@@ -140,9 +159,7 @@ struct MenuView: View {
                         Text(note.title)
                             .font(Theme.rounded(13, weight: .semibold))
                             .lineLimit(1)
-                        Text(note.updatedAt, style: .relative)
-                            .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
+                        TimestampText(date: note.updatedAt)
                     }
                     Spacer()
                 }
@@ -172,15 +189,28 @@ struct MenuView: View {
 
     private var footer: some View {
         HStack(spacing: 8) {
-            Image(systemName: "externaldrive")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.tertiary)
-            Text(model.storagePath)
-                .font(Theme.mono(10))
-                .foregroundStyle(.tertiary)
-                .lineLimit(1)
-                .truncationMode(.middle)
+            Button(action: model.openStorageInFinder) {
+                HStack(spacing: 8) {
+                    Image(systemName: "externaldrive")
+                        .font(.system(size: 10, weight: .semibold))
+                    Text(model.storagePath)
+                        .font(Theme.mono(10))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.tertiary)
+            .help("Reveal storage in Finder")
             Spacer()
+            Button {
+                showingUninstallConfirmation = true
+            } label: {
+                Label("Uninstall", systemImage: "trash")
+                    .font(.system(size: 11))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
             Button(action: quit) {
                 Label("Quit", systemImage: "power")
                     .font(.system(size: 11))
@@ -201,32 +231,95 @@ struct MenuView: View {
 private struct NoteRow: View {
     let note: Note
     let selected: Bool
+    let canMoveUp: Bool
+    let canMoveDown: Bool
+    let select: () -> Void
+    let moveUp: () -> Void
+    let moveDown: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 6) {
-                if note.pinned {
-                    Image(systemName: "pin.fill")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(Theme.pinned)
+        HStack(spacing: 6) {
+            Button(action: select) {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 5) {
+                        if note.pinned {
+                            Image(systemName: "pin.fill")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundStyle(Theme.pinned)
+                        }
+                        Text(note.title)
+                            .font(Theme.rounded(11, weight: .semibold))
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                    }
+                    HStack(spacing: 8) {
+                        Text(note.preview)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        TimestampText(date: note.updatedAt)
+                    }
                 }
-                Text(note.title)
-                    .font(Theme.rounded(12, weight: .semibold))
-                    .lineLimit(1)
-                Spacer(minLength: 0)
             }
-            Text(note.preview)
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-            Text(note.updatedAt, style: .relative)
-                .font(.system(size: 9))
-                .foregroundStyle(.tertiary)
+            .buttonStyle(.plain)
+
+            VStack(spacing: 0) {
+                reorderButton("chevron.up", disabled: !canMoveUp, action: moveUp)
+                reorderButton("chevron.down", disabled: !canMoveDown, action: moveDown)
+            }
         }
-        .padding(10)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: Theme.innerCorner).fill(selected ? Theme.accent.opacity(0.18) : Color.primary.opacity(0.055)))
         .overlay(RoundedRectangle(cornerRadius: Theme.innerCorner).strokeBorder(selected ? Theme.accent.opacity(0.55) : Color.clear, lineWidth: 1))
         .contentShape(RoundedRectangle(cornerRadius: Theme.innerCorner))
     }
+
+    private func reorderButton(_ icon: String, disabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 9, weight: .bold))
+                .frame(width: 18, height: 16)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(disabled ? Color.secondary.opacity(0.25) : Color.secondary)
+        .disabled(disabled)
+    }
+}
+
+private struct TimestampText: View {
+    let date: Date
+
+    var body: some View {
+        Text(Self.text(for: date))
+            .font(.system(size: 9))
+            .foregroundStyle(.tertiary)
+            .lineLimit(1)
+    }
+
+    private static func text(for date: Date) -> String {
+        let calendar = Calendar.current
+        let time = timeFormatter.string(from: date)
+        if calendar.isDateInToday(date) {
+            return "Today \(time)"
+        }
+        if calendar.isDateInYesterday(date) {
+            return "Yesterday \(time)"
+        }
+        return dateFormatter.string(from: date)
+    }
+
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d HH:mm"
+        return formatter
+    }()
 }

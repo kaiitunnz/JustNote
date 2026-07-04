@@ -8,7 +8,9 @@ A macOS menu-bar app for plain-text notes. It stays in the menu bar, opens as a 
 - Navigates all notes from the menu-bar panel.
 - Autosaves edits to `.txt` files.
 - Persists selected note, pinned notes, and recently opened notes.
-- Keeps pinned notes at the top of the main note list.
+- Keeps pinned and unpinned notes in separate movable sections.
+- Reveals the storage folder in Finder from the footer path.
+- Can uninstall itself by clearing Application Support, moving the app bundle to the Trash, and quitting.
 
 Notes live in:
 

@@ -69,6 +69,38 @@ final class JustNoteTests: XCTestCase {
         XCTAssertNotEqual(firstID, secondID)
     }
 
+    func testMovingNotesPersistsWithinPinnedAndUnpinnedSections() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        let firstID = try XCTUnwrap(model.selectedNoteID)
+        model.updateSelectedBody("First")
+        model.createNote()
+        let secondID = try XCTUnwrap(model.selectedNoteID)
+        model.updateSelectedBody("Second")
+        model.createNote()
+        let thirdID = try XCTUnwrap(model.selectedNoteID)
+        model.updateSelectedBody("Third")
+
+        XCTAssertEqual(model.unpinnedNotes.map(\.id), [thirdID, secondID, firstID])
+
+        model.moveUnpinnedNote(firstID, direction: -1)
+        XCTAssertEqual(model.unpinnedNotes.map(\.id), [thirdID, firstID, secondID])
+
+        model.select(firstID)
+        model.togglePinSelected()
+        model.select(secondID)
+        model.togglePinSelected()
+        XCTAssertEqual(model.pinnedNotes.map(\.id), [secondID, firstID])
+        XCTAssertEqual(model.unpinnedNotes.map(\.id), [thirdID])
+
+        model.movePinnedNote(firstID, direction: -1)
+        XCTAssertEqual(model.pinnedNotes.map(\.id), [firstID, secondID])
+        XCTAssertEqual(model.unpinnedNotes.map(\.id), [thirdID])
+
+        let reloaded = AppModel(store: try NoteStore(rootURL: rootURL))
+        XCTAssertEqual(reloaded.pinnedNotes.map(\.id), [firstID, secondID])
+        XCTAssertEqual(reloaded.unpinnedNotes.map(\.id), [thirdID])
+    }
+
     func testDeletingSelectedNoteLeavesValidSelectionOrEmptyState() throws {
         let model = AppModel(store: try NoteStore(rootURL: rootURL))
         model.createNote()

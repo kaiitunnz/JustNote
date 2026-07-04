@@ -53,6 +53,7 @@ final class NoteStore {
             notes: notes,
             selectedNoteID: state.selectedNoteID.flatMap { noteIDs.contains($0) ? $0 : nil },
             recentNoteIDs: state.recentNoteIDs.filter { noteIDs.contains($0) },
+            noteOrderIDs: sanitizedOrder(state.noteOrderIDs ?? [], noteIDs: noteIDs, notes: notes),
             isFresh: false
         )
     }
@@ -63,7 +64,8 @@ final class NoteStore {
         let state = PersistedState(
             notes: snapshot.notes.map { NoteMetadata(note: $0) },
             selectedNoteID: snapshot.selectedNoteID.flatMap { noteIDs.contains($0) ? $0 : nil },
-            recentNoteIDs: snapshot.recentNoteIDs.filter { noteIDs.contains($0) }
+            recentNoteIDs: snapshot.recentNoteIDs.filter { noteIDs.contains($0) },
+            noteOrderIDs: sanitizedOrder(snapshot.noteOrderIDs, noteIDs: noteIDs, notes: snapshot.notes)
         )
 
         for note in snapshot.notes {
@@ -92,12 +94,43 @@ final class NoteStore {
             }
         }
     }
+
+    func removeAll() throws {
+        guard fileManager.fileExists(atPath: rootURL.path) else { return }
+        try fileManager.removeItem(at: rootURL)
+    }
+
+    private func sanitizedOrder(_ order: [UUID], noteIDs: Set<UUID>, notes: [Note]) -> [UUID] {
+        if order.isEmpty {
+            return notes
+                .sorted { lhs, rhs in
+                    if lhs.pinned != rhs.pinned { return lhs.pinned && !rhs.pinned }
+                    if lhs.updatedAt != rhs.updatedAt { return lhs.updatedAt > rhs.updatedAt }
+                    return lhs.createdAt > rhs.createdAt
+                }
+                .map(\.id)
+        }
+        var seen: Set<UUID> = []
+        var result = order.filter { id in
+            noteIDs.contains(id) && seen.insert(id).inserted
+        }
+        let missing = notes
+            .filter { !seen.contains($0.id) }
+            .sorted { lhs, rhs in
+                if lhs.updatedAt != rhs.updatedAt { return lhs.updatedAt > rhs.updatedAt }
+                return lhs.createdAt > rhs.createdAt
+            }
+            .map(\.id)
+        result.append(contentsOf: missing)
+        return result
+    }
 }
 
 private struct PersistedState: Codable {
     var notes: [NoteMetadata]
     var selectedNoteID: UUID?
     var recentNoteIDs: [UUID]
+    var noteOrderIDs: [UUID]?
 }
 
 private struct NoteMetadata: Codable {
