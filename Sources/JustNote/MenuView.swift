@@ -7,6 +7,7 @@ struct MenuView: View {
     @AppStorage("sidebarWidth") private var sidebarWidth = Double(Theme.sidebarWidth)
     @AppStorage("wrapLines") private var wrapLines = true
     @AppStorage("previewMode") private var isPreviewing = false
+    @AppStorage("sidebarCollapsed") private var sidebarCollapsed = false
     @State private var showingUninstallConfirmation = false
     @State private var draggingNoteID: UUID?
     @State private var splitDragStartWidth: Double?
@@ -16,11 +17,13 @@ struct MenuView: View {
             header
             Divider()
             HStack(spacing: 0) {
-                sidebar
-                    .frame(width: CGFloat(sidebarWidth))
-                    .clipped()
-                Splitter()
-                    .gesture(splitDrag)
+                if !sidebarCollapsed {
+                    sidebar
+                        .frame(width: CGFloat(sidebarWidth))
+                        .clipped()
+                    Splitter()
+                        .gesture(splitDrag)
+                }
                 editor
             }
             Divider()
@@ -39,6 +42,15 @@ struct MenuView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) { sidebarCollapsed.toggle() }
+            } label: {
+                Image(systemName: "sidebar.left")
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            .buttonStyle(HeaderIconButtonStyle())
+            .help(sidebarCollapsed ? "Show sidebar" : "Hide sidebar")
+
             ZStack {
                 Circle().fill(Theme.accent.opacity(0.18))
                 JustNoteMark()
