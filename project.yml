@@ -30,6 +30,9 @@ packages:
     # Pinned to a main commit: the 2.7.0 release fails to compile against the macOS 27 SDK
     # ('Document' ambiguity), fixed on main.
     revision: 7f55e9dc4cee6b788ac94b6187b2e0ce663c00df
+  KeyboardShortcuts:
+    url: https://github.com/sindresorhus/KeyboardShortcuts.git
+    from: 1.9.4
 
 schemes:
   JustNote:
@@ -51,6 +54,7 @@ targets:
         type: file
     dependencies:
       - package: MarkdownView
+      - package: KeyboardShortcuts
     settings:
       base:
         PRODUCT_NAME: JustNote
