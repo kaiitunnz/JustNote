@@ -307,6 +307,12 @@ struct MenuView: View {
                 .keyboardShortcut("]", modifiers: .command)
             Button("Previous note") { cycle(-1) }
                 .keyboardShortcut("[", modifiers: .command)
+            ForEach(1...8, id: \.self) { n in
+                Button("Jump to note \(n)") { model.selectNote(at: n - 1) }
+                    .keyboardShortcut(KeyEquivalent(Character("\(n)")), modifiers: .command)
+            }
+            Button("Jump to last note") { model.selectNote(at: model.orderedNotes.count - 1) }
+                .keyboardShortcut("9", modifiers: .command)
         }
         .frame(width: 0, height: 0)
         .opacity(0)

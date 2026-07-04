@@ -117,6 +117,12 @@ final class AppModel: ObservableObject {
         return wrapped
     }
 
+    func selectNote(at index: Int) {
+        let ordered = orderedNotes
+        guard ordered.indices.contains(index) else { return }
+        select(ordered[index].id)
+    }
+
     func updateSelectedBody(_ body: String) {
         guard let selectedNoteID, let index = notes.firstIndex(where: { $0.id == selectedNoteID }) else { return }
         guard notes[index].body != body else { return }

@@ -69,6 +69,24 @@ final class JustNoteTests: XCTestCase {
         XCTAssertEqual(model.selectedNoteID, order[2])
     }
 
+    func testSelectNoteByIndex() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        model.createNote()
+        model.createNote()
+        let order = model.orderedNotes.map(\.id)
+        XCTAssertEqual(order.count, 3)
+
+        model.selectNote(at: 1)
+        XCTAssertEqual(model.selectedNoteID, order[1])
+        model.selectNote(at: 0)
+        XCTAssertEqual(model.selectedNoteID, order[0])
+
+        model.selectNote(at: 99)
+        XCTAssertEqual(model.selectedNoteID, order[0])
+        model.selectNote(at: -1)
+        XCTAssertEqual(model.selectedNoteID, order[0])
+    }
+
     func testSelectAdjacentNoteIsNoOpWithSingleNote() throws {
         let model = AppModel(store: try NoteStore(rootURL: rootURL))
         XCTAssertEqual(model.orderedNotes.count, 1)
