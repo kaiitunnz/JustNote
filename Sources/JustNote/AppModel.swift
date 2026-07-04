@@ -63,13 +63,18 @@ final class AppModel: ObservableObject {
         store.rootURL
     }
 
-    func createNote() {
+    func createNote(body: String = "") {
         let now = Date()
-        let note = Note(body: "", createdAt: now, updatedAt: now)
+        let note = Note(body: body, createdAt: now, updatedAt: now)
         notes.append(note)
         noteOrderIDs.insert(note.id, at: firstUnpinnedOrderIndex)
         selectedNoteID = note.id
         save()
+    }
+
+    func duplicateNote(_ noteID: UUID) {
+        guard let note = notes.first(where: { $0.id == noteID }) else { return }
+        createNote(body: note.body)
     }
 
     func deleteSelectedNote() {

@@ -39,6 +39,17 @@ final class JustNoteTests: XCTestCase {
         XCTAssertEqual(reloaded.selectedNote?.body, "Meeting notes\n- ship JustNote")
     }
 
+    func testCreateNoteCanSeedInitialBody() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+
+        model.createNote(body: "Pasted note\nfrom clipboard")
+
+        let id = try XCTUnwrap(model.selectedNoteID)
+        let bodyURL = rootURL.appendingPathComponent("Notes").appendingPathComponent("\(id.uuidString).txt")
+        XCTAssertEqual(model.selectedNote?.body, "Pasted note\nfrom clipboard")
+        XCTAssertEqual(try String(contentsOf: bodyURL, encoding: .utf8), "Pasted note\nfrom clipboard")
+    }
+
     func testTitleStripsLeadingMarkdownHeader() {
         XCTAssertEqual(Note.title(from: "# My Note"), "My Note")
         XCTAssertEqual(Note.title(from: "###  Spaced"), "Spaced")
@@ -130,6 +141,22 @@ final class JustNoteTests: XCTestCase {
         XCTAssertTrue(try XCTUnwrap(model.notes.first { $0.id == firstID }).pinned)
         XCTAssertFalse(try XCTUnwrap(model.notes.first { $0.id == secondID }).pinned)
         XCTAssertEqual(model.pinnedNotes.map(\.id), [firstID])
+    }
+
+    func testDuplicateNoteCopiesBodyIntoSelectedUnpinnedNote() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        let originalID = try XCTUnwrap(model.selectedNoteID)
+        model.updateSelectedBody("Template\n- keep this")
+        model.togglePin(originalID)
+
+        model.duplicateNote(originalID)
+
+        let duplicate = try XCTUnwrap(model.selectedNote)
+        XCTAssertNotEqual(duplicate.id, originalID)
+        XCTAssertEqual(duplicate.body, "Template\n- keep this")
+        XCTAssertFalse(duplicate.pinned)
+        XCTAssertEqual(model.pinnedNotes.map(\.id), [originalID])
+        XCTAssertEqual(model.unpinnedNotes.map(\.id), [duplicate.id])
     }
 
     func testMovingNotesPersistsWithinPinnedAndUnpinnedSections() throws {

@@ -164,12 +164,20 @@ struct MenuView: View {
         }
     }
 
+    @ViewBuilder
     private var sidebarContextMenu: some View {
         Button {
             createNote()
         } label: {
             Label("New Note", systemImage: "square.and.pencil")
         }
+
+        Button {
+            pasteAsNewNote()
+        } label: {
+            Label("Paste as New Note", systemImage: "doc.on.clipboard")
+        }
+        .disabled(pasteboardText == nil)
     }
 
     @ViewBuilder
@@ -196,7 +204,27 @@ struct MenuView: View {
         }
         .disabled(!canMoveNote(note, pinned: pinned, direction: 1))
 
+        Button {
+            moveNote(note, pinned: pinned, toEdge: .top)
+        } label: {
+            Label("Move to Top", systemImage: "arrow.up.to.line")
+        }
+        .disabled(!canMoveNote(note, pinned: pinned, direction: -1))
+
+        Button {
+            moveNote(note, pinned: pinned, toEdge: .bottom)
+        } label: {
+            Label("Move to Bottom", systemImage: "arrow.down.to.line")
+        }
+        .disabled(!canMoveNote(note, pinned: pinned, direction: 1))
+
         Divider()
+
+        Button {
+            model.duplicateNote(note.id)
+        } label: {
+            Label("Duplicate Note", systemImage: "plus.square.on.square")
+        }
 
         Button {
             model.revealNoteInFinder(note.id)
@@ -208,6 +236,12 @@ struct MenuView: View {
             copyTitle(note)
         } label: {
             Label("Copy Title", systemImage: "doc.on.doc")
+        }
+
+        Button {
+            copyContents(note)
+        } label: {
+            Label("Copy Note Contents", systemImage: "doc.text")
         }
 
         Divider()
@@ -369,6 +403,22 @@ struct MenuView: View {
         NSPasteboard.general.setString(note.title, forType: .string)
     }
 
+    private func copyContents(_ note: Note) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(note.body, forType: .string)
+    }
+
+    private func pasteAsNewNote() {
+        guard let text = pasteboardText else { return }
+        isPreviewing = false
+        model.createNote(body: text)
+    }
+
+    private var pasteboardText: String? {
+        guard let text = NSPasteboard.general.string(forType: .string), !text.isEmpty else { return nil }
+        return text
+    }
+
     private func canMoveNote(_ note: Note, pinned: Bool, direction: Int) -> Bool {
         if pinned {
             return model.canMovePinnedNote(note.id, direction: direction)
@@ -382,6 +432,12 @@ struct MenuView: View {
         } else {
             model.moveUnpinnedNote(note.id, direction: direction)
         }
+    }
+
+    private func moveNote(_ note: Note, pinned: Bool, toEdge edge: SectionEdge) {
+        let notes = pinned ? model.pinnedNotes : model.unpinnedNotes
+        guard let targetIndex = edge.targetIndex(in: notes) else { return }
+        model.moveNote(note.id, inPinnedSection: pinned, toIndex: targetIndex)
     }
 
     private func toggleSidebar() {
@@ -503,6 +559,20 @@ private struct Splitter: View {
             } else {
                 NSCursor.pop()
             }
+        }
+    }
+}
+
+private enum SectionEdge {
+    case top
+    case bottom
+
+    func targetIndex(in notes: [Note]) -> Int? {
+        switch self {
+        case .top:
+            return notes.isEmpty ? nil : 0
+        case .bottom:
+            return notes.indices.last
         }
     }
 }
