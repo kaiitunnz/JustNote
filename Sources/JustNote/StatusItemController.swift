@@ -56,6 +56,17 @@ final class StatusItemController: NSObject {
         if popover.isShown { popover.performClose(nil) }
     }
 
+    func withDismissHandlersSuspended<T>(_ work: () -> T) -> T {
+        let shouldRestore = popover.isShown
+        removeDismissHandlers()
+        defer {
+            if shouldRestore, popover.isShown {
+                installDismissHandlers()
+            }
+        }
+        return work()
+    }
+
     /// `.applicationDefined` never auto-closes, so we replicate the transient dismissals we want:
     /// a click in another app (global), a click elsewhere in our own app (local, excluding the
     /// status button and the popover itself), and app deactivation (Cmd-Tab / Mission Control).

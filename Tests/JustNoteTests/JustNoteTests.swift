@@ -153,17 +153,30 @@ final class JustNoteTests: XCTestCase {
 
     func testDeletingSelectedNoteLeavesValidSelectionOrEmptyState() throws {
         let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        let firstID = try XCTUnwrap(model.selectedNoteID)
+        model.updateSelectedBody("First")
         model.createNote()
+        let secondID = try XCTUnwrap(model.selectedNoteID)
+        model.updateSelectedBody("Second")
+
+        let notesURL = rootURL.appendingPathComponent("Notes")
+        let firstBodyURL = notesURL.appendingPathComponent("\(firstID.uuidString).txt")
+        let secondBodyURL = notesURL.appendingPathComponent("\(secondID.uuidString).txt")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: firstBodyURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: secondBodyURL.path))
 
         model.deleteSelectedNote()
 
         XCTAssertEqual(model.notes.count, 1)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: secondBodyURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: firstBodyURL.path))
         XCTAssertTrue(model.selectedNoteID.map { id in model.notes.contains { $0.id == id } } ?? false)
 
         model.deleteSelectedNote()
 
         XCTAssertTrue(model.notes.isEmpty)
         XCTAssertNil(model.selectedNoteID)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: firstBodyURL.path))
 
         let reloaded = AppModel(store: try NoteStore(rootURL: rootURL))
         XCTAssertTrue(reloaded.notes.isEmpty)
