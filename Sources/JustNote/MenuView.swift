@@ -101,6 +101,7 @@ struct MenuView: View {
                     noteSection("NOTES", notes: model.unpinnedNotes, pinned: false)
                 }
                 .padding(.vertical, 2)
+                .padding(.trailing, 10)
             }
 
             if !model.recentNotes.isEmpty {
@@ -260,7 +261,7 @@ struct MenuView: View {
     }
 
     private var splitDrag: some Gesture {
-        DragGesture(minimumDistance: 0)
+        DragGesture(minimumDistance: 0, coordinateSpace: .global)
             .onChanged { value in
                 if splitDragStartWidth == nil {
                     splitDragStartWidth = sidebarWidth
