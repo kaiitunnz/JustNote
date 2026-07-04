@@ -1,4 +1,5 @@
 import AppKit
+import MarkdownView
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -30,6 +31,7 @@ struct MenuView: View {
             footer
         }
         .frame(width: Theme.panelWidth, height: Theme.panelHeight)
+        .background { navigationShortcuts }
         .tint(Theme.accent)
         .containerBackground(.thinMaterial, for: .window)
         .alert("Uninstall JustNote?", isPresented: $showingUninstallConfirmation) {
@@ -42,15 +44,6 @@ struct MenuView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.18)) { sidebarCollapsed.toggle() }
-            } label: {
-                Image(systemName: "sidebar.left")
-                    .font(.system(size: 13, weight: .semibold))
-            }
-            .buttonStyle(HeaderIconButtonStyle())
-            .help(sidebarCollapsed ? "Show sidebar" : "Hide sidebar")
-
             ZStack {
                 Circle().fill(Theme.accent.opacity(0.18))
                 JustNoteMark()
@@ -192,6 +185,15 @@ struct MenuView: View {
         VStack(alignment: .leading, spacing: 10) {
             if let note = model.selectedNote {
                 HStack(spacing: 8) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.18)) { sidebarCollapsed.toggle() }
+                    } label: {
+                        Image(systemName: sidebarCollapsed ? "sidebar.left" : "sidebar.leading")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .buttonStyle(HeaderIconButtonStyle())
+                    .help(sidebarCollapsed ? "Show sidebar" : "Hide sidebar")
+
                     Image(systemName: note.pinned ? "pin.fill" : "doc.text")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(note.pinned ? Theme.pinned : Theme.accent)
@@ -224,7 +226,11 @@ struct MenuView: View {
 
                 Group {
                     if isPreviewing {
-                        MarkdownPreview(text: note.body)
+                        ScrollView {
+                            MarkdownView(note.body)
+                                .padding(12)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     } else {
                         PlainTextEditor(text: model.bodyBinding(), wrapsLines: wrapLines)
                     }
@@ -287,6 +293,18 @@ struct MenuView: View {
     private func createNote() {
         isPreviewing = false
         model.createNote()
+    }
+
+    private var navigationShortcuts: some View {
+        Group {
+            Button("Next note") { model.selectAdjacentNote(offset: 1) }
+                .keyboardShortcut("]", modifiers: .command)
+            Button("Previous note") { model.selectAdjacentNote(offset: -1) }
+                .keyboardShortcut("[", modifiers: .command)
+        }
+        .frame(width: 0, height: 0)
+        .opacity(0)
+        .accessibilityHidden(true)
     }
 
     private func quit() {

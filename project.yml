@@ -24,6 +24,13 @@ settings:
       CODE_SIGNING_ALLOWED: "YES"
       DEVELOPMENT_TEAM: "C62G6XUR78"
 
+packages:
+  MarkdownView:
+    url: https://github.com/LiYanan2004/MarkdownView.git
+    # Pinned to a main commit: the 2.7.0 release fails to compile against the macOS 27 SDK
+    # ('Document' ambiguity), fixed on main.
+    revision: 7f55e9dc4cee6b788ac94b6187b2e0ce663c00df
+
 schemes:
   JustNote:
     build:
@@ -42,6 +49,8 @@ targets:
       - Sources/JustNote
       - path: Resources/JustNote.icon
         type: file
+    dependencies:
+      - package: MarkdownView
     settings:
       base:
         PRODUCT_NAME: JustNote
