@@ -83,5 +83,9 @@ final class JustNoteTests: XCTestCase {
         XCTAssertTrue(model.notes.isEmpty)
         XCTAssertNil(model.selectedNoteID)
         XCTAssertTrue(model.recentNoteIDs.isEmpty)
+
+        let reloaded = AppModel(store: try NoteStore(rootURL: rootURL))
+        XCTAssertTrue(reloaded.notes.isEmpty)
+        XCTAssertNil(reloaded.selectedNoteID)
     }
 }

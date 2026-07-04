@@ -33,7 +33,7 @@ final class NoteStore {
 
     func load() throws -> NotesSnapshot {
         guard fileManager.fileExists(atPath: stateURL.path) else {
-            return NotesSnapshot(notes: [], selectedNoteID: nil, recentNoteIDs: [])
+            return NotesSnapshot(notes: [], selectedNoteID: nil, recentNoteIDs: [], isFresh: true)
         }
         let data = try Data(contentsOf: stateURL)
         let state = try JSONDecoder().decode(PersistedState.self, from: data)
@@ -52,7 +52,8 @@ final class NoteStore {
         return NotesSnapshot(
             notes: notes,
             selectedNoteID: state.selectedNoteID.flatMap { noteIDs.contains($0) ? $0 : nil },
-            recentNoteIDs: state.recentNoteIDs.filter { noteIDs.contains($0) }
+            recentNoteIDs: state.recentNoteIDs.filter { noteIDs.contains($0) },
+            isFresh: false
         )
     }
 

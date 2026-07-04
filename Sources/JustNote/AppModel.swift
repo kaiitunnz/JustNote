@@ -19,7 +19,7 @@ final class AppModel: ObservableObject {
             snapshot = try resolvedStore.load()
         } catch {
             resolvedStore = try! NoteStore(rootURL: FileManager.default.temporaryDirectory.appendingPathComponent("JustNoteFallback"))
-            snapshot = NotesSnapshot(notes: [], selectedNoteID: nil, recentNoteIDs: [])
+            snapshot = NotesSnapshot(notes: [], selectedNoteID: nil, recentNoteIDs: [], isFresh: true)
             loadError = error.localizedDescription
         }
 
@@ -29,7 +29,7 @@ final class AppModel: ObservableObject {
         recentNoteIDs = snapshot.recentNoteIDs
         lastError = loadError
 
-        if notes.isEmpty {
+        if notes.isEmpty && snapshot.isFresh {
             createNote()
         } else if selectedNoteID == nil {
             selectedNoteID = orderedNotes.first?.id
