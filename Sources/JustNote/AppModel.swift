@@ -123,11 +123,13 @@ final class AppModel: ObservableObject {
     }
 
     func movePinnedNote(_ noteID: UUID, direction: Int) {
-        move(noteID, inPinnedSection: true, direction: direction)
+        guard let index = pinnedNotes.firstIndex(where: { $0.id == noteID }) else { return }
+        moveNote(noteID, inPinnedSection: true, toIndex: index + direction)
     }
 
     func moveUnpinnedNote(_ noteID: UUID, direction: Int) {
-        move(noteID, inPinnedSection: false, direction: direction)
+        guard let index = unpinnedNotes.firstIndex(where: { $0.id == noteID }) else { return }
+        moveNote(noteID, inPinnedSection: false, toIndex: index + direction)
     }
 
     func canMovePinnedNote(_ noteID: UUID, direction: Int) -> Bool {
@@ -136,6 +138,19 @@ final class AppModel: ObservableObject {
 
     func canMoveUnpinnedNote(_ noteID: UUID, direction: Int) -> Bool {
         canMove(noteID, in: unpinnedNotes, direction: direction)
+    }
+
+    func moveNote(_ noteID: UUID, inPinnedSection pinned: Bool, toIndex requestedIndex: Int) {
+        var sectionIDs = (pinned ? pinnedNotes : unpinnedNotes).map(\.id)
+        guard let currentIndex = sectionIDs.firstIndex(of: noteID) else { return }
+
+        let targetIndex = min(max(requestedIndex, 0), sectionIDs.count - 1)
+        guard currentIndex != targetIndex else { return }
+
+        sectionIDs.remove(at: currentIndex)
+        sectionIDs.insert(noteID, at: targetIndex)
+        rebuildOrder(sectionIDs: sectionIDs, pinned: pinned)
+        save()
     }
 
     func openStorageInFinder() {
@@ -195,15 +210,9 @@ final class AppModel: ObservableObject {
         return noteOrderIDs.firstIndex { !pinnedIDs.contains($0) } ?? noteOrderIDs.count
     }
 
-    private func move(_ noteID: UUID, inPinnedSection pinned: Bool, direction: Int) {
-        var sectionIDs = (pinned ? pinnedNotes : unpinnedNotes).map(\.id)
-        guard let index = sectionIDs.firstIndex(of: noteID) else { return }
-        let newIndex = index + direction
-        guard sectionIDs.indices.contains(newIndex) else { return }
-        sectionIDs.swapAt(index, newIndex)
+    private func rebuildOrder(sectionIDs: [UUID], pinned: Bool) {
         let otherIDs = (pinned ? unpinnedNotes : pinnedNotes).map(\.id)
         noteOrderIDs = pinned ? sectionIDs + otherIDs : otherIDs + sectionIDs
-        save()
     }
 
     private func canMove(_ noteID: UUID, in section: [Note], direction: Int) -> Bool {

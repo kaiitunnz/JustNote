@@ -1,9 +1,11 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct MenuView: View {
     @ObservedObject var model: AppModel
     @State private var showingUninstallConfirmation = false
+    @State private var draggingNoteID: UUID?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -133,17 +135,36 @@ struct MenuView: View {
                     .font(Theme.rounded(10, weight: .semibold))
                     .foregroundStyle(.tertiary)
                     .padding(.horizontal, 2)
-                ForEach(notes) { note in
+                ForEach(Array(notes.enumerated()), id: \.element.id) { index, note in
                     NoteRow(
                         note: note,
-                        selected: note.id == model.selectedNoteID,
-                        canMoveUp: pinned ? model.canMovePinnedNote(note.id, direction: -1) : model.canMoveUnpinnedNote(note.id, direction: -1),
-                        canMoveDown: pinned ? model.canMovePinnedNote(note.id, direction: 1) : model.canMoveUnpinnedNote(note.id, direction: 1),
-                        select: { model.select(note.id) },
-                        moveUp: { pinned ? model.movePinnedNote(note.id, direction: -1) : model.moveUnpinnedNote(note.id, direction: -1) },
-                        moveDown: { pinned ? model.movePinnedNote(note.id, direction: 1) : model.moveUnpinnedNote(note.id, direction: 1) }
+                        selected: note.id == model.selectedNoteID
+                    )
+                    .onTapGesture { model.select(note.id) }
+                    .onDrag {
+                        draggingNoteID = note.id
+                        return NSItemProvider(object: note.id.uuidString as NSString)
+                    }
+                    .onDrop(
+                        of: [.text],
+                        delegate: NoteDropDelegate(
+                            model: model,
+                            draggingNoteID: $draggingNoteID,
+                            pinned: pinned,
+                            targetIndex: index
+                        )
                     )
                 }
+                SectionEndDropTarget()
+                    .onDrop(
+                        of: [.text],
+                        delegate: NoteDropDelegate(
+                            model: model,
+                            draggingNoteID: $draggingNoteID,
+                            pinned: pinned,
+                            targetIndex: max(notes.count - 1, 0)
+                        )
+                    )
             }
         }
     }
@@ -231,42 +252,34 @@ struct MenuView: View {
 private struct NoteRow: View {
     let note: Note
     let selected: Bool
-    let canMoveUp: Bool
-    let canMoveDown: Bool
-    let select: () -> Void
-    let moveUp: () -> Void
-    let moveDown: () -> Void
 
     var body: some View {
-        HStack(spacing: 6) {
-            Button(action: select) {
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 5) {
-                        if note.pinned {
-                            Image(systemName: "pin.fill")
-                                .font(.system(size: 8, weight: .bold))
-                                .foregroundStyle(Theme.pinned)
-                        }
-                        Text(note.title)
-                            .font(Theme.rounded(11, weight: .semibold))
-                            .lineLimit(1)
-                        Spacer(minLength: 0)
-                    }
-                    HStack(spacing: 8) {
-                        Text(note.preview)
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                        Spacer(minLength: 0)
-                        TimestampText(date: note.updatedAt)
-                    }
-                }
-            }
-            .buttonStyle(.plain)
+        HStack(spacing: 8) {
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.tertiary)
+                .frame(width: 12)
 
-            VStack(spacing: 0) {
-                reorderButton("chevron.up", disabled: !canMoveUp, action: moveUp)
-                reorderButton("chevron.down", disabled: !canMoveDown, action: moveDown)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 5) {
+                    if note.pinned {
+                        Image(systemName: "pin.fill")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(Theme.pinned)
+                    }
+                    Text(note.title)
+                        .font(Theme.rounded(11, weight: .semibold))
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+                HStack(spacing: 8) {
+                    Text(note.preview)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    TimestampText(date: note.updatedAt)
+                }
             }
         }
         .padding(.horizontal, 8)
@@ -276,17 +289,56 @@ private struct NoteRow: View {
         .overlay(RoundedRectangle(cornerRadius: Theme.innerCorner).strokeBorder(selected ? Theme.accent.opacity(0.55) : Color.clear, lineWidth: 1))
         .contentShape(RoundedRectangle(cornerRadius: Theme.innerCorner))
     }
+}
 
-    private func reorderButton(_ icon: String, disabled: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 9, weight: .bold))
-                .frame(width: 18, height: 16)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(disabled ? Color.secondary.opacity(0.25) : Color.secondary)
-        .disabled(disabled)
+private struct SectionEndDropTarget: View {
+    var body: some View {
+        RoundedRectangle(cornerRadius: 4)
+            .fill(Color.primary.opacity(0.001))
+            .frame(height: 12)
     }
+}
+
+private struct NoteDropDelegate: DropDelegate {
+    @ObservedObject var model: AppModel
+    @Binding var draggingNoteID: UUID?
+    let pinned: Bool
+    let targetIndex: Int
+
+    func validateDrop(info: DropInfo) -> Bool {
+        info.hasItemsConforming(to: [.text])
+    }
+
+    func dropEntered(info: DropInfo) {
+        guard let noteID = draggingNoteID else { return }
+        move(noteID)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        if let noteID = draggingNoteID {
+            move(noteID)
+            draggingNoteID = nil
+            return true
+        }
+
+        guard let provider = info.itemProviders(for: [.text]).first else { return false }
+        provider.loadObject(ofClass: NSString.self) { item, _ in
+            guard let string = item as? NSString, let noteID = UUID(uuidString: string as String) else { return }
+            Task { @MainActor in
+                move(noteID)
+                draggingNoteID = nil
+            }
+        }
+        return true
+    }
+
+    func dropExited(info: DropInfo) {}
+
+    private func move(_ noteID: UUID) {
+        guard model.notes.first(where: { $0.id == noteID })?.pinned == pinned else { return }
+        model.moveNote(noteID, inPinnedSection: pinned, toIndex: targetIndex)
+    }
+
 }
 
 private struct TimestampText: View {

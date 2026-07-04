@@ -85,6 +85,9 @@ final class JustNoteTests: XCTestCase {
         model.moveUnpinnedNote(firstID, direction: -1)
         XCTAssertEqual(model.unpinnedNotes.map(\.id), [thirdID, firstID, secondID])
 
+        model.moveNote(thirdID, inPinnedSection: false, toIndex: 2)
+        XCTAssertEqual(model.unpinnedNotes.map(\.id), [firstID, secondID, thirdID])
+
         model.select(firstID)
         model.togglePinSelected()
         model.select(secondID)
