@@ -83,3 +83,10 @@ enum MenuBarIcon {
 func resignTextFocus() {
     NSApp.keyWindow?.makeFirstResponder(nil)
 }
+
+/// Switch to a regular (Dock-visible) app before showing a real window. Paired with the
+/// AppDelegate lifecycle, which returns to `.accessory` once the last titled window closes.
+func prepareToShowWindow() {
+    NSApp.setActivationPolicy(.regular)
+    NSApp.activate(ignoringOtherApps: true)
+}
