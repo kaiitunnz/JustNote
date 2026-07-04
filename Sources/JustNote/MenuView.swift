@@ -266,7 +266,11 @@ struct MenuView: View {
                     splitDragStartWidth = sidebarWidth
                 }
                 let baseWidth = splitDragStartWidth ?? sidebarWidth
-                sidebarWidth = min(max(baseWidth + value.translation.width, Double(Theme.minSidebarWidth)), Double(Theme.maxSidebarWidth))
+                var newWidth = baseWidth + value.translation.width
+                if abs(newWidth - Double(Theme.sidebarWidth)) < 15 {
+                    newWidth = Double(Theme.sidebarWidth)
+                }
+                sidebarWidth = min(max(newWidth, Double(Theme.minSidebarWidth)), Double(Theme.maxSidebarWidth))
             }
             .onEnded { _ in
                 splitDragStartWidth = nil
@@ -304,11 +308,6 @@ private struct NoteRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "line.3.horizontal")
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(.tertiary)
-                .frame(width: 12)
-
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 5) {
                     if note.pinned {
@@ -356,6 +355,10 @@ private struct NoteDropDelegate: DropDelegate {
 
     func validateDrop(info: DropInfo) -> Bool {
         info.hasItemsConforming(to: [.text])
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
     }
 
     func dropEntered(info: DropInfo) {

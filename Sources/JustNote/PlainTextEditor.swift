@@ -57,6 +57,9 @@ struct PlainTextEditor: NSViewRepresentable {
             textView.autoresizingMask = [.width]
             textContainer.widthTracksTextView = true
             textContainer.containerSize = NSSize(width: scrollView.contentSize.width, height: CGFloat.greatestFiniteMagnitude)
+            var frame = textView.frame
+            frame.size.width = scrollView.contentSize.width
+            textView.frame = frame
         } else {
             textView.autoresizingMask = []
             textContainer.widthTracksTextView = false
