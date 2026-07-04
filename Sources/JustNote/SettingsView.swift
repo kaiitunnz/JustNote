@@ -44,11 +44,11 @@ private struct FixedShortcut: Identifiable {
 
     static let all = [
         FixedShortcut(action: "New note", keys: "⌘N"),
-        FixedShortcut(action: "Delete selected note", keys: "⇧⌘D"),
-        FixedShortcut(action: "Pin or unpin selected note", keys: "⇧⌘P"),
-        FixedShortcut(action: "Show or hide sidebar", keys: "⇧⌘E"),
-        FixedShortcut(action: "Preview or edit Markdown", keys: "⇧⌘V"),
-        FixedShortcut(action: "Toggle soft wrap", keys: "⌥⌘W"),
-        FixedShortcut(action: "Reveal notes folder", keys: "⇧⌘R"),
+        FixedShortcut(action: "Delete selected note", keys: "⌘⇧D"),
+        FixedShortcut(action: "Pin or unpin selected note", keys: "⌘⇧P"),
+        FixedShortcut(action: "Show or hide sidebar", keys: "⌘⇧E"),
+        FixedShortcut(action: "Preview or edit Markdown", keys: "⌘⇧V"),
+        FixedShortcut(action: "Toggle soft wrap", keys: "⌘⌥W"),
+        FixedShortcut(action: "Reveal notes folder", keys: "⌘⇧R"),
     ]
 }
