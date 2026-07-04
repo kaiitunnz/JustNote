@@ -4,8 +4,11 @@ import UniformTypeIdentifiers
 
 struct MenuView: View {
     @ObservedObject var model: AppModel
+    @AppStorage("sidebarWidth") private var sidebarWidth = Double(Theme.sidebarWidth)
+    @AppStorage("wrapLines") private var wrapLines = true
     @State private var showingUninstallConfirmation = false
     @State private var draggingNoteID: UUID?
+    @State private var splitDragStartWidth: Double?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -13,7 +16,10 @@ struct MenuView: View {
             Divider()
             HStack(spacing: 0) {
                 sidebar
-                Divider()
+                    .frame(width: CGFloat(sidebarWidth))
+                    .clipped()
+                Splitter()
+                    .gesture(splitDrag)
                 editor
             }
             Divider()
@@ -125,7 +131,6 @@ struct MenuView: View {
             }
         }
         .padding(12)
-        .frame(width: Theme.sidebarWidth)
     }
 
     private func noteSection(_ title: String, notes: [Note], pinned: Bool) -> some View {
@@ -183,12 +188,18 @@ struct MenuView: View {
                         TimestampText(date: note.updatedAt)
                     }
                     Spacer()
+                    Button {
+                        wrapLines.toggle()
+                    } label: {
+                        Image(systemName: wrapLines ? "text.alignleft" : "arrow.left.and.right")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .buttonStyle(HeaderIconButtonStyle())
+                    .help(wrapLines ? "Soft wrap is on" : "Soft wrap is off")
                 }
 
-                TextEditor(text: model.bodyBinding())
-                    .font(Theme.mono(13))
-                    .scrollContentBackground(.hidden)
-                    .padding(10)
+                PlainTextEditor(text: model.bodyBinding(), wrapsLines: wrapLines)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .contentSurface(cornerRadius: Theme.innerCorner)
                     .onTapGesture { }
             } else {
@@ -246,6 +257,44 @@ struct MenuView: View {
     private func quit() {
         AppDelegate.shared?.isQuitting = true
         NSApplication.shared.terminate(nil)
+    }
+
+    private var splitDrag: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                if splitDragStartWidth == nil {
+                    splitDragStartWidth = sidebarWidth
+                }
+                let baseWidth = splitDragStartWidth ?? sidebarWidth
+                sidebarWidth = min(max(baseWidth + value.translation.width, Double(Theme.minSidebarWidth)), Double(Theme.maxSidebarWidth))
+            }
+            .onEnded { _ in
+                splitDragStartWidth = nil
+            }
+    }
+}
+
+private struct Splitter: View {
+    @State private var hovering = false
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(Color.clear)
+                .frame(width: 10)
+            Rectangle()
+                .fill(hovering ? Theme.accent.opacity(0.65) : Color(nsColor: .separatorColor))
+                .frame(width: hovering ? 2 : 1)
+        }
+        .contentShape(Rectangle())
+        .onHover { inside in
+            hovering = inside
+            if inside {
+                NSCursor.resizeLeftRight.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
     }
 }
 

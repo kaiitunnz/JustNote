@@ -156,8 +156,11 @@ final class AppModel: ObservableObject {
     func openStorageInFinder() {
         do {
             try FileManager.default.createDirectory(at: storageURL, withIntermediateDirectories: true)
-            NSWorkspace.shared.activateFileViewerSelecting([storageURL])
-            lastError = nil
+            if NSWorkspace.shared.open(storageURL) {
+                lastError = nil
+            } else {
+                lastError = "Open folder failed: Finder could not open \(storagePath)"
+            }
         } catch {
             lastError = "Open folder failed: \(error.localizedDescription)"
         }

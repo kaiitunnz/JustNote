@@ -9,6 +9,8 @@ A macOS menu-bar app for plain-text notes. It stays in the menu bar, opens as a 
 - Autosaves edits to `.txt` files.
 - Persists selected note, pinned notes, and recently opened notes.
 - Keeps pinned and unpinned notes in separate drag-movable sections.
+- Supports a draggable sidebar/editor divider.
+- Toggles soft wrapping so hard newlines are easier to distinguish from wrapped text.
 - Reveals the storage folder in Finder from the footer path.
 - Can uninstall itself by clearing Application Support, moving the app bundle to the Trash, and quitting.
 
