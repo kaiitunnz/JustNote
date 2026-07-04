@@ -44,8 +44,11 @@ struct Note: Identifiable, Equatable {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .first { !$0.isEmpty }
         guard let line, !line.isEmpty else { return "Untitled" }
-        return String(line.prefix(48))
+        let stripped = line.replacing(headerMarker, with: "")
+        return String(stripped.prefix(48))
     }
+
+    private static let headerMarker = try! Regex("^#{1,6}[ \\t]+")
 }
 
 struct NotesSnapshot: Equatable {

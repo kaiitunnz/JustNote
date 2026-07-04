@@ -39,6 +39,17 @@ final class JustNoteTests: XCTestCase {
         XCTAssertEqual(reloaded.selectedNote?.body, "Meeting notes\n- ship JustNote")
     }
 
+    func testTitleStripsLeadingMarkdownHeader() {
+        XCTAssertEqual(Note.title(from: "# My Note"), "My Note")
+        XCTAssertEqual(Note.title(from: "###  Spaced"), "Spaced")
+        XCTAssertEqual(Note.title(from: "\n\n## Second line header"), "Second line header")
+        XCTAssertEqual(Note.title(from: "#NoSpace"), "#NoSpace")
+        XCTAssertEqual(Note.title(from: "####### TooMany"), "####### TooMany")
+        XCTAssertEqual(Note.title(from: "###"), "###")
+        XCTAssertEqual(Note.title(from: "#   "), "#")
+        XCTAssertEqual(Note.title(from: "Plain title"), "Plain title")
+    }
+
     func testSelectingNotesUpdatesRecentOrder() throws {
         let model = AppModel(store: try NoteStore(rootURL: rootURL))
         let firstID = try XCTUnwrap(model.selectedNoteID)
