@@ -49,9 +49,9 @@ struct PlainTextEditor: NSViewRepresentable {
 
         if context.coordinator.previousWrapsLines != wrapsLines {
             context.coordinator.previousWrapsLines = wrapsLines
+            textView.layoutManager?.ensureLayout(for: textView.textContainer!)
             textView.sizeToFit()
-            let currentY = scrollView.contentView.bounds.origin.y
-            scrollView.contentView.scroll(to: NSPoint(x: 0, y: currentY))
+            scrollView.contentView.scroll(to: .zero)
         }
     }
 
