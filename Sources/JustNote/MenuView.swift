@@ -12,7 +12,7 @@ struct MenuView: View {
     @State private var showingUninstallConfirmation = false
     @State private var draggingNoteID: UUID?
     @State private var splitDragStartWidth: Double?
-    @State private var wrapMessage: String?
+    @State private var wrapIcon: String?
     @State private var wrapToken = 0
 
     var body: some View {
@@ -315,23 +315,17 @@ struct MenuView: View {
 
     @ViewBuilder
     private var wrapIndicator: some View {
-        if let wrapMessage {
+        if let wrapIcon {
             ZStack {
                 Color.black.opacity(0.18)
                     .transition(.opacity)
-                VStack(spacing: 12) {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                        .font(.system(size: 46, weight: .semibold))
-                        .foregroundStyle(Theme.accent)
-                    Text(wrapMessage)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
-                }
-                .frame(width: 150, height: 132)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
-                .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.primary.opacity(0.08)))
-                .shadow(color: .black.opacity(0.25), radius: 22, y: 8)
-                .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                Image(systemName: wrapIcon)
+                    .font(.system(size: 46, weight: .semibold))
+                    .foregroundStyle(Theme.accent)
+                    .frame(width: 116, height: 116)
+                    .glassEffect(.regular, in: .rect(cornerRadius: 22))
+                    .shadow(color: .black.opacity(0.25), radius: 22, y: 8)
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
             }
             .allowsHitTesting(false)
         }
@@ -342,11 +336,11 @@ struct MenuView: View {
         wrapToken += 1
         let token = wrapToken
         withAnimation(.easeOut(duration: 0.15)) {
-            wrapMessage = offset > 0 ? "Looped to first note" : "Looped to last note"
+            wrapIcon = offset > 0 ? "arrow.clockwise" : "arrow.counterclockwise"
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             guard wrapToken == token else { return }
-            withAnimation(.easeIn(duration: 0.35)) { wrapMessage = nil }
+            withAnimation(.easeIn(duration: 0.25)) { wrapIcon = nil }
         }
     }
 
@@ -429,8 +423,8 @@ private struct NoteRow: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Theme.innerCorner).fill(selected ? Theme.accent.opacity(0.18) : Color.primary.opacity(0.055)))
-        .overlay(RoundedRectangle(cornerRadius: Theme.innerCorner).strokeBorder(selected ? Theme.accent.opacity(0.55) : Color.clear, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: Theme.innerCorner).fill(selected ? Theme.accent.opacity(0.18) : Color.black.opacity(0.18)))
+        .overlay(RoundedRectangle(cornerRadius: Theme.innerCorner).strokeBorder(selected ? Theme.accent.opacity(0.55) : Color.white.opacity(0.06), lineWidth: 1))
         .contentShape(RoundedRectangle(cornerRadius: Theme.innerCorner))
     }
 }
