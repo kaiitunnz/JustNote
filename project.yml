@@ -1,0 +1,66 @@
+name: JustNote
+options:
+  bundleIdPrefix: com.justnote
+  deploymentTarget:
+    macOS: "27.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+  configs:
+    Debug:
+      CODE_SIGN_IDENTITY: "-"
+      CODE_SIGN_STYLE: Manual
+      CODE_SIGNING_REQUIRED: "NO"
+      CODE_SIGNING_ALLOWED: "NO"
+    Release:
+      CODE_SIGN_STYLE: Automatic
+      CODE_SIGN_IDENTITY: "Apple Development"
+      CODE_SIGNING_REQUIRED: "YES"
+      CODE_SIGNING_ALLOWED: "YES"
+      DEVELOPMENT_TEAM: "C62G6XUR78"
+
+schemes:
+  JustNote:
+    build:
+      targets:
+        JustNote: all
+        JustNoteTests: [test]
+    test:
+      targets:
+        - JustNoteTests
+
+targets:
+  JustNote:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/JustNote
+      - path: Resources/JustNote.icon
+        type: file
+    settings:
+      base:
+        PRODUCT_NAME: JustNote
+        PRODUCT_BUNDLE_IDENTIFIER: com.justnote.app
+        GENERATE_INFOPLIST_FILE: "YES"
+        INFOPLIST_KEY_LSUIElement: "YES"
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+        ASSETCATALOG_COMPILER_APPICON_NAME: JustNote
+        MACOSX_DEPLOYMENT_TARGET: "27.0"
+
+  JustNoteTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests/JustNoteTests
+    dependencies:
+      - target: JustNote
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.justnote.app.tests
+        GENERATE_INFOPLIST_FILE: "YES"
+        MACOSX_DEPLOYMENT_TARGET: "27.0"

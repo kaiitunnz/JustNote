@@ -1,0 +1,16 @@
+# Xcode / build (project is generated from project.yml via XcodeGen)
+*.xcodeproj/
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
+
+# macOS
+.DS_Store
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Dev tools
+.claude/
