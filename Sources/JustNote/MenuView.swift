@@ -6,9 +6,7 @@ struct MenuView: View {
     @ObservedObject var model: AppModel
     @AppStorage("sidebarWidth") private var sidebarWidth = Double(Theme.sidebarWidth)
     @AppStorage("wrapLines") private var wrapLines = true
-    @AppStorage("renderingMode") private var renderingMode = "edit"
-
-    private var isPreviewing: Bool { renderingMode == "preview" }
+    @AppStorage("previewMode") private var isPreviewing = false
     @State private var showingUninstallConfirmation = false
     @State private var draggingNoteID: UUID?
     @State private var splitDragStartWidth: Double?
@@ -68,7 +66,7 @@ struct MenuView: View {
                     .frame(maxWidth: 220, alignment: .trailing)
             }
 
-            Button(action: model.createNote) {
+            Button(action: createNote) {
                 Image(systemName: "square.and.pencil")
                     .font(.system(size: 13, weight: .semibold))
             }
@@ -203,7 +201,7 @@ struct MenuView: View {
                         .help(wrapLines ? "Soft wrap is on" : "Soft wrap is off")
                     }
                     Button {
-                        renderingMode = isPreviewing ? "edit" : "preview"
+                        isPreviewing.toggle()
                     } label: {
                         Image(systemName: isPreviewing ? "pencil" : "eye")
                             .font(.system(size: 12, weight: .semibold))
@@ -227,7 +225,7 @@ struct MenuView: View {
                     Image(systemName: "note.text.badge.plus")
                         .font(.system(size: 34))
                         .foregroundStyle(Theme.accent)
-                    Button("Create note", action: model.createNote)
+                    Button("Create note", action: createNote)
                         .actionButtonStyle(primary: true)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -272,6 +270,11 @@ struct MenuView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+    }
+
+    private func createNote() {
+        isPreviewing = false
+        model.createNote()
     }
 
     private func quit() {
