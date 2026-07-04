@@ -116,6 +116,22 @@ final class JustNoteTests: XCTestCase {
         XCTAssertNotEqual(firstID, secondID)
     }
 
+    func testTogglePinTargetsSpecificNoteWithoutChangingSelection() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        let firstID = try XCTUnwrap(model.selectedNoteID)
+        model.updateSelectedBody("First")
+        model.createNote()
+        let secondID = try XCTUnwrap(model.selectedNoteID)
+        model.updateSelectedBody("Second")
+
+        model.togglePin(firstID)
+
+        XCTAssertEqual(model.selectedNoteID, secondID)
+        XCTAssertTrue(try XCTUnwrap(model.notes.first { $0.id == firstID }).pinned)
+        XCTAssertFalse(try XCTUnwrap(model.notes.first { $0.id == secondID }).pinned)
+        XCTAssertEqual(model.pinnedNotes.map(\.id), [firstID])
+    }
+
     func testMovingNotesPersistsWithinPinnedAndUnpinnedSections() throws {
         let model = AppModel(store: try NoteStore(rootURL: rootURL))
         let firstID = try XCTUnwrap(model.selectedNoteID)
@@ -151,6 +167,22 @@ final class JustNoteTests: XCTestCase {
         XCTAssertEqual(reloaded.unpinnedNotes.map(\.id), [thirdID])
     }
 
+    func testDeletingSpecificNonSelectedNoteKeepsCurrentSelection() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        let firstID = try XCTUnwrap(model.selectedNoteID)
+        model.updateSelectedBody("First")
+        model.createNote()
+        let secondID = try XCTUnwrap(model.selectedNoteID)
+        model.updateSelectedBody("Second")
+
+        model.deleteNote(firstID)
+
+        XCTAssertEqual(model.notes.map(\.id), [secondID])
+        XCTAssertEqual(model.selectedNoteID, secondID)
+        let firstBodyURL = rootURL.appendingPathComponent("Notes").appendingPathComponent("\(firstID.uuidString).txt")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: firstBodyURL.path))
+    }
+
     func testDeletingSelectedNoteLeavesValidSelectionOrEmptyState() throws {
         let model = AppModel(store: try NoteStore(rootURL: rootURL))
         let firstID = try XCTUnwrap(model.selectedNoteID)
@@ -181,5 +213,15 @@ final class JustNoteTests: XCTestCase {
         let reloaded = AppModel(store: try NoteStore(rootURL: rootURL))
         XCTAssertTrue(reloaded.notes.isEmpty)
         XCTAssertNil(reloaded.selectedNoteID)
+    }
+
+    func testNoteBodyURLPointsInsideNotesDirectory() throws {
+        let store = try NoteStore(rootURL: rootURL)
+        let note = Note(body: "File path")
+
+        XCTAssertEqual(
+            store.noteBodyURL(for: note),
+            rootURL.appendingPathComponent("Notes").appendingPathComponent("\(note.id.uuidString).txt")
+        )
     }
 }

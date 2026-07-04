@@ -78,6 +78,10 @@ final class NoteStore {
         try encoder.encode(state).write(to: stateURL, options: .atomic)
     }
 
+    func noteBodyURL(for note: Note) -> URL {
+        notesURL.appendingPathComponent(note.fileName)
+    }
+
     private func removeDeletedNoteFiles(keeping noteIDs: Set<UUID>) throws {
         guard fileManager.fileExists(atPath: notesURL.path) else { return }
         let files = try fileManager.contentsOfDirectory(

@@ -74,9 +74,16 @@ final class AppModel: ObservableObject {
 
     func deleteSelectedNote() {
         guard let selectedNoteID else { return }
-        notes.removeAll { $0.id == selectedNoteID }
-        noteOrderIDs.removeAll { $0 == selectedNoteID }
-        self.selectedNoteID = orderedNotes.first?.id
+        deleteNote(selectedNoteID)
+    }
+
+    func deleteNote(_ noteID: UUID) {
+        guard notes.contains(where: { $0.id == noteID }) else { return }
+        notes.removeAll { $0.id == noteID }
+        noteOrderIDs.removeAll { $0 == noteID }
+        if selectedNoteID.map({ selectedID in notes.contains { $0.id == selectedID } }) != true {
+            selectedNoteID = orderedNotes.first?.id
+        }
         save()
     }
 
@@ -119,13 +126,22 @@ final class AppModel: ObservableObject {
 
     func togglePinSelected() {
         guard let selectedNoteID, let index = notes.firstIndex(where: { $0.id == selectedNoteID }) else { return }
+        togglePin(selectedNoteID, at: index)
+    }
+
+    func togglePin(_ noteID: UUID) {
+        guard let index = notes.firstIndex(where: { $0.id == noteID }) else { return }
+        togglePin(noteID, at: index)
+    }
+
+    private func togglePin(_ noteID: UUID, at index: Int) {
         notes[index].pinned.toggle()
         notes[index].updatedAt = Date()
-        noteOrderIDs.removeAll { $0 == selectedNoteID }
+        noteOrderIDs.removeAll { $0 == noteID }
         if notes[index].pinned {
-            noteOrderIDs.insert(selectedNoteID, at: 0)
+            noteOrderIDs.insert(noteID, at: 0)
         } else {
-            noteOrderIDs.insert(selectedNoteID, at: firstUnpinnedOrderIndex)
+            noteOrderIDs.insert(noteID, at: firstUnpinnedOrderIndex)
         }
         save()
     }
@@ -172,6 +188,17 @@ final class AppModel: ObservableObject {
         } catch {
             lastError = "Open folder failed: \(error.localizedDescription)"
         }
+    }
+
+    func revealNoteInFinder(_ noteID: UUID) {
+        guard let note = notes.first(where: { $0.id == noteID }) else { return }
+        let noteURL = store.noteBodyURL(for: note)
+        guard FileManager.default.fileExists(atPath: noteURL.path) else {
+            lastError = "Reveal note failed: \(noteURL.lastPathComponent) does not exist"
+            return
+        }
+        NSWorkspace.shared.activateFileViewerSelecting([noteURL])
+        lastError = nil
     }
 
     func uninstallAndQuit() {
