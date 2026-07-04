@@ -105,7 +105,7 @@ struct MenuView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 12) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 2) {
                     noteSection("PINNED", notes: model.pinnedNotes, pinned: true)
                     noteSection("NOTES", notes: model.unpinnedNotes, pinned: false)
                 }
@@ -230,8 +230,7 @@ struct MenuView: View {
                 Group {
                     if isPreviewing {
                         ScrollView {
-                            MarkdownView(note.body)
-                                .textSelection(.enabled)
+                            MarkdownText(note.body)
                                 .padding(12)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -317,15 +316,23 @@ struct MenuView: View {
     @ViewBuilder
     private var wrapIndicator: some View {
         if let wrapMessage {
-            Text(wrapMessage)
-                .font(.system(size: 12, weight: .semibold))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(.regularMaterial, in: Capsule())
-                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08)))
-                .shadow(color: .black.opacity(0.18), radius: 12, y: 4)
-                .transition(.opacity.combined(with: .scale(scale: 0.92)))
-                .allowsHitTesting(false)
+            ZStack {
+                Color.black.opacity(0.18)
+                VStack(spacing: 12) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 46, weight: .semibold))
+                        .foregroundStyle(Theme.accent)
+                    Text(wrapMessage)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(width: 150, height: 132)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
+                .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.primary.opacity(0.08)))
+                .shadow(color: .black.opacity(0.25), radius: 22, y: 8)
+            }
+            .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            .allowsHitTesting(false)
         }
     }
 
@@ -431,7 +438,7 @@ private struct SectionEndDropTarget: View {
     var body: some View {
         RoundedRectangle(cornerRadius: 4)
             .fill(Color.primary.opacity(0.001))
-            .frame(height: 6)
+            .frame(height: 4)
     }
 }
 
