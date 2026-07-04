@@ -55,7 +55,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// settles before AppKit routes `showSettingsWindow:`. If no window actually opens (the
     /// selector is private and has been renamed across releases), don't strand the app with a
     /// Dock icon and no window — revert to `.accessory`.
+    @MainActor
     func openSettings() {
+        statusItemController?.closePopover()
         prepareToShowWindow()
         DispatchQueue.main.async {
             NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
