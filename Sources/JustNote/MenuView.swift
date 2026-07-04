@@ -215,7 +215,7 @@ struct MenuView: View {
                     Button {
                         isPreviewing.toggle()
                     } label: {
-                        Image(systemName: isPreviewing ? "pencil" : "eye")
+                        Image(systemName: isPreviewing ? "eye" : "pencil")
                             .font(.system(size: 12, weight: .semibold))
                     }
                     .buttonStyle(HeaderIconButtonStyle())
