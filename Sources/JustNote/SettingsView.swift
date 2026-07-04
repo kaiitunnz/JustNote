@@ -11,10 +11,44 @@ struct SettingsView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
+            Section {
+                ForEach(FixedShortcut.all) { shortcut in
+                    HStack {
+                        Text(shortcut.action)
+                        Spacer()
+                        Text(shortcut.keys)
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                Text("Fixed Shortcuts")
+            } footer: {
+                Text("These panel shortcuts are built in and are not configurable yet.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         .tint(Theme.accent)
         .frame(width: 380)
         .fixedSize(horizontal: false, vertical: true)
     }
+}
+
+private struct FixedShortcut: Identifiable {
+    let action: String
+    let keys: String
+
+    var id: String { action }
+
+    static let all = [
+        FixedShortcut(action: "New note", keys: "⌘N"),
+        FixedShortcut(action: "Delete selected note", keys: "⇧⌘D"),
+        FixedShortcut(action: "Pin or unpin selected note", keys: "⇧⌘P"),
+        FixedShortcut(action: "Show or hide sidebar", keys: "⇧⌘E"),
+        FixedShortcut(action: "Preview or edit Markdown", keys: "⇧⌘V"),
+        FixedShortcut(action: "Toggle soft wrap", keys: "⌥⌘W"),
+        FixedShortcut(action: "Reveal notes folder", keys: "⇧⌘R"),
+    ]
 }

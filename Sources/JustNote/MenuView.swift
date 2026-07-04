@@ -33,7 +33,7 @@ struct MenuView: View {
             footer
         }
         .frame(width: Theme.panelWidth, height: Theme.panelHeight)
-        .background { navigationShortcuts }
+        .background { keyboardShortcuts }
         .overlay(alignment: .center) { wrapIndicator }
         .tint(Theme.accent)
         .containerBackground(.thinMaterial, for: .window)
@@ -162,7 +162,7 @@ struct MenuView: View {
             if let note = model.selectedNote {
                 HStack(spacing: 8) {
                     Button {
-                        withAnimation(.easeInOut(duration: 0.18)) { sidebarCollapsed.toggle() }
+                        toggleSidebar()
                     } label: {
                         Image(systemName: sidebarCollapsed ? "sidebar.left" : "sidebar.leading")
                             .font(.system(size: 12, weight: .semibold))
@@ -191,7 +191,7 @@ struct MenuView: View {
                         .help(wrapLines ? "Soft wrap is on" : "Soft wrap is off")
                     }
                     Button {
-                        isPreviewing.toggle()
+                        togglePreviewMode()
                     } label: {
                         Image(systemName: isPreviewing ? "eye" : "pencil")
                             .font(.system(size: 12, weight: .semibold))
@@ -283,8 +283,34 @@ struct MenuView: View {
         model.createNote()
     }
 
-    private var navigationShortcuts: some View {
+    private func toggleSidebar() {
+        withAnimation(.easeInOut(duration: 0.18)) { sidebarCollapsed.toggle() }
+    }
+
+    private func togglePreviewMode() {
+        guard model.selectedNote != nil else { return }
+        isPreviewing.toggle()
+    }
+
+    private var keyboardShortcuts: some View {
         Group {
+            Button("New note") { createNote() }
+                .keyboardShortcut("n", modifiers: .command)
+            Button("Delete note") { model.deleteSelectedNote() }
+                .keyboardShortcut("d", modifiers: [.command, .shift])
+                .disabled(model.selectedNote == nil)
+            Button("Pin note") { model.togglePinSelected() }
+                .keyboardShortcut("p", modifiers: [.command, .shift])
+                .disabled(model.selectedNote == nil)
+            Button("Toggle sidebar") { toggleSidebar() }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
+            Button("Toggle Markdown preview") { togglePreviewMode() }
+                .keyboardShortcut("v", modifiers: [.command, .shift])
+                .disabled(model.selectedNote == nil)
+            Button("Toggle soft wrap") { wrapLines.toggle() }
+                .keyboardShortcut("w", modifiers: [.command, .option])
+            Button("Reveal notes folder") { model.openStorageInFinder() }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
             Button("Next note") { cycle(1) }
                 .keyboardShortcut("]", modifiers: .command)
             Button("Previous note") { cycle(-1) }
