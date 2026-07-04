@@ -1,4 +1,5 @@
 import AppKit
+import MarkdownView
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -6,26 +7,34 @@ struct MenuView: View {
     @ObservedObject var model: AppModel
     @AppStorage("sidebarWidth") private var sidebarWidth = Double(Theme.sidebarWidth)
     @AppStorage("wrapLines") private var wrapLines = true
+    @AppStorage("previewMode") private var isPreviewing = false
+    @AppStorage("sidebarCollapsed") private var sidebarCollapsed = false
     @State private var showingUninstallConfirmation = false
     @State private var draggingNoteID: UUID?
     @State private var splitDragStartWidth: Double?
+    @State private var wrapIcon: String?
+    @State private var wrapToken = 0
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider()
             HStack(spacing: 0) {
-                sidebar
-                    .frame(width: CGFloat(sidebarWidth))
-                    .clipped()
-                Splitter()
-                    .gesture(splitDrag)
+                if !sidebarCollapsed {
+                    sidebar
+                        .frame(width: CGFloat(sidebarWidth))
+                        .clipped()
+                    Splitter()
+                        .gesture(splitDrag)
+                }
                 editor
             }
             Divider()
             footer
         }
         .frame(width: Theme.panelWidth, height: Theme.panelHeight)
+        .background { navigationShortcuts }
+        .overlay(alignment: .center) { wrapIndicator }
         .tint(Theme.accent)
         .containerBackground(.thinMaterial, for: .window)
         .alert("Uninstall JustNote?", isPresented: $showingUninstallConfirmation) {
@@ -65,7 +74,7 @@ struct MenuView: View {
                     .frame(maxWidth: 220, alignment: .trailing)
             }
 
-            Button(action: model.createNote) {
+            Button(action: createNote) {
                 Image(systemName: "square.and.pencil")
                     .font(.system(size: 13, weight: .semibold))
             }
@@ -96,40 +105,13 @@ struct MenuView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 12) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
                     noteSection("PINNED", notes: model.pinnedNotes, pinned: true)
                     noteSection("NOTES", notes: model.unpinnedNotes, pinned: false)
                 }
                 .padding(.vertical, 2)
             }
             .scrollIndicators(.hidden)
-
-            if !model.recentNotes.isEmpty {
-                VStack(alignment: .leading, spacing: 7) {
-                    Text("RECENT")
-                        .font(Theme.rounded(10, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                    ForEach(model.recentNotes.prefix(4)) { note in
-                        Button {
-                            model.select(note.id)
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: note.pinned ? "pin.fill" : "clock")
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundStyle(note.pinned ? Theme.pinned : Color.secondary.opacity(0.7))
-                                Text(note.title)
-                                    .font(.system(size: 11))
-                                    .lineLimit(1)
-                                Spacer(minLength: 0)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(10)
-                .contentSurface(cornerRadius: Theme.innerCorner)
-            }
         }
         .padding(12)
     }
@@ -179,6 +161,15 @@ struct MenuView: View {
         VStack(alignment: .leading, spacing: 10) {
             if let note = model.selectedNote {
                 HStack(spacing: 8) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.18)) { sidebarCollapsed.toggle() }
+                    } label: {
+                        Image(systemName: sidebarCollapsed ? "sidebar.left" : "sidebar.leading")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .buttonStyle(HeaderIconButtonStyle())
+                    .help(sidebarCollapsed ? "Show sidebar" : "Hide sidebar")
+
                     Image(systemName: note.pinned ? "pin.fill" : "doc.text")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(note.pinned ? Theme.pinned : Theme.accent)
@@ -189,26 +180,47 @@ struct MenuView: View {
                         TimestampText(date: note.updatedAt)
                     }
                     Spacer()
+                    if !isPreviewing {
+                        Button {
+                            wrapLines.toggle()
+                        } label: {
+                            Image(systemName: wrapLines ? "text.alignleft" : "arrow.left.and.right")
+                                .font(.system(size: 12, weight: .semibold))
+                        }
+                        .buttonStyle(HeaderIconButtonStyle())
+                        .help(wrapLines ? "Soft wrap is on" : "Soft wrap is off")
+                    }
                     Button {
-                        wrapLines.toggle()
+                        isPreviewing.toggle()
                     } label: {
-                        Image(systemName: wrapLines ? "text.alignleft" : "arrow.left.and.right")
+                        Image(systemName: isPreviewing ? "eye" : "pencil")
                             .font(.system(size: 12, weight: .semibold))
                     }
                     .buttonStyle(HeaderIconButtonStyle())
-                    .help(wrapLines ? "Soft wrap is on" : "Soft wrap is off")
+                    .help(isPreviewing ? "Edit note" : "Preview markdown")
                 }
 
-                PlainTextEditor(text: model.bodyBinding(), wrapsLines: wrapLines)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .contentSurface(cornerRadius: Theme.innerCorner)
-                    .onTapGesture { }
+                Group {
+                    if isPreviewing {
+                        ScrollView {
+                            MarkdownText(note.body)
+                                .padding(12)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    } else {
+                        PlainTextEditor(text: model.bodyBinding(), wrapsLines: wrapLines)
+                            .contentShape(Rectangle())
+                            .onTapGesture { }
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentSurface(cornerRadius: Theme.innerCorner)
             } else {
                 VStack(spacing: 12) {
                     Image(systemName: "note.text.badge.plus")
                         .font(.system(size: 34))
                         .foregroundStyle(Theme.accent)
-                    Button("Create note", action: model.createNote)
+                    Button("Create note", action: createNote)
                         .actionButtonStyle(primary: true)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -216,7 +228,9 @@ struct MenuView: View {
         }
         .padding(14)
         .background {
-            Color.clear.contentShape(Rectangle()).onTapGesture { resignTextFocus() }
+            if !isPreviewing {
+                Color.clear.contentShape(Rectangle()).onTapGesture { resignTextFocus() }
+            }
         }
     }
 
@@ -253,6 +267,60 @@ struct MenuView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+    }
+
+    private func createNote() {
+        isPreviewing = false
+        model.createNote()
+    }
+
+    private var navigationShortcuts: some View {
+        Group {
+            Button("Next note") { cycle(1) }
+                .keyboardShortcut("]", modifiers: .command)
+            Button("Previous note") { cycle(-1) }
+                .keyboardShortcut("[", modifiers: .command)
+            ForEach(1...8, id: \.self) { n in
+                Button("Jump to note \(n)") { model.selectNote(at: n - 1) }
+                    .keyboardShortcut(KeyEquivalent(Character("\(n)")), modifiers: .command)
+            }
+            Button("Jump to last note") { model.selectNote(at: model.orderedNotes.count - 1) }
+                .keyboardShortcut("9", modifiers: .command)
+        }
+        .frame(width: 0, height: 0)
+        .opacity(0)
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private var wrapIndicator: some View {
+        if let wrapIcon {
+            ZStack {
+                Color.black.opacity(0.18)
+                    .transition(.opacity)
+                Image(systemName: wrapIcon)
+                    .font(.system(size: 46, weight: .semibold))
+                    .foregroundStyle(Theme.accent)
+                    .frame(width: 116, height: 116)
+                    .glassEffect(.regular, in: .rect(cornerRadius: 22))
+                    .shadow(color: .black.opacity(0.25), radius: 22, y: 8)
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            }
+            .allowsHitTesting(false)
+        }
+    }
+
+    private func cycle(_ offset: Int) {
+        guard model.selectAdjacentNote(offset: offset) else { return }
+        wrapToken += 1
+        let token = wrapToken
+        withAnimation(.easeOut(duration: 0.15)) {
+            wrapIcon = offset > 0 ? "arrow.clockwise" : "arrow.counterclockwise"
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            guard wrapToken == token else { return }
+            withAnimation(.easeIn(duration: 0.25)) { wrapIcon = nil }
+        }
     }
 
     private func quit() {
@@ -334,8 +402,8 @@ private struct NoteRow: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Theme.innerCorner).fill(selected ? Theme.accent.opacity(0.18) : Color.primary.opacity(0.055)))
-        .overlay(RoundedRectangle(cornerRadius: Theme.innerCorner).strokeBorder(selected ? Theme.accent.opacity(0.55) : Color.clear, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: Theme.innerCorner).fill(selected ? Theme.accent.opacity(0.18) : Color.black.opacity(0.18)))
+        .overlay(RoundedRectangle(cornerRadius: Theme.innerCorner).strokeBorder(selected ? Theme.accent.opacity(0.55) : Color.white.opacity(0.06), lineWidth: 1))
         .contentShape(RoundedRectangle(cornerRadius: Theme.innerCorner))
     }
 }
@@ -344,7 +412,7 @@ private struct SectionEndDropTarget: View {
     var body: some View {
         RoundedRectangle(cornerRadius: 4)
             .fill(Color.primary.opacity(0.001))
-            .frame(height: 12)
+            .frame(height: 4)
     }
 }
 

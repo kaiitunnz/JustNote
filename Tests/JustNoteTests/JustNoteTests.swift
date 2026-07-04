@@ -39,15 +39,62 @@ final class JustNoteTests: XCTestCase {
         XCTAssertEqual(reloaded.selectedNote?.body, "Meeting notes\n- ship JustNote")
     }
 
-    func testSelectingNotesUpdatesRecentOrder() throws {
+    func testTitleStripsLeadingMarkdownHeader() {
+        XCTAssertEqual(Note.title(from: "# My Note"), "My Note")
+        XCTAssertEqual(Note.title(from: "###  Spaced"), "Spaced")
+        XCTAssertEqual(Note.title(from: "\n\n## Second line header"), "Second line header")
+        XCTAssertEqual(Note.title(from: "#NoSpace"), "#NoSpace")
+        XCTAssertEqual(Note.title(from: "####### TooMany"), "####### TooMany")
+        XCTAssertEqual(Note.title(from: "###"), "###")
+        XCTAssertEqual(Note.title(from: "#   "), "#")
+        XCTAssertEqual(Note.title(from: "Plain title"), "Plain title")
+    }
+
+    func testSelectAdjacentNoteWrapsAround() throws {
         let model = AppModel(store: try NoteStore(rootURL: rootURL))
-        let firstID = try XCTUnwrap(model.selectedNoteID)
         model.createNote()
-        let secondID = try XCTUnwrap(model.selectedNoteID)
+        model.createNote()
+        let order = model.orderedNotes.map(\.id)
+        XCTAssertEqual(order.count, 3)
 
-        model.select(firstID)
+        model.select(order[0])
+        XCTAssertFalse(model.selectAdjacentNote(offset: 1))
+        XCTAssertEqual(model.selectedNoteID, order[1])
+        XCTAssertFalse(model.selectAdjacentNote(offset: 1))
+        XCTAssertEqual(model.selectedNoteID, order[2])
+        XCTAssertTrue(model.selectAdjacentNote(offset: 1))
+        XCTAssertEqual(model.selectedNoteID, order[0])
 
-        XCTAssertEqual(model.recentNoteIDs.prefix(2), [firstID, secondID])
+        XCTAssertTrue(model.selectAdjacentNote(offset: -1))
+        XCTAssertEqual(model.selectedNoteID, order[2])
+    }
+
+    func testSelectNoteByIndex() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        model.createNote()
+        model.createNote()
+        let order = model.orderedNotes.map(\.id)
+        XCTAssertEqual(order.count, 3)
+
+        model.selectNote(at: 1)
+        XCTAssertEqual(model.selectedNoteID, order[1])
+        model.selectNote(at: 0)
+        XCTAssertEqual(model.selectedNoteID, order[0])
+
+        model.selectNote(at: 99)
+        XCTAssertEqual(model.selectedNoteID, order[0])
+        model.selectNote(at: -1)
+        XCTAssertEqual(model.selectedNoteID, order[0])
+    }
+
+    func testSelectAdjacentNoteIsNoOpWithSingleNote() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        XCTAssertEqual(model.orderedNotes.count, 1)
+        let only = model.selectedNoteID
+
+        XCTAssertFalse(model.selectAdjacentNote(offset: 1))
+        XCTAssertFalse(model.selectAdjacentNote(offset: -1))
+        XCTAssertEqual(model.selectedNoteID, only)
     }
 
     func testPinningPersistsAndSortsPinnedFirst() throws {
@@ -117,7 +164,6 @@ final class JustNoteTests: XCTestCase {
 
         XCTAssertTrue(model.notes.isEmpty)
         XCTAssertNil(model.selectedNoteID)
-        XCTAssertTrue(model.recentNoteIDs.isEmpty)
 
         let reloaded = AppModel(store: try NoteStore(rootURL: rootURL))
         XCTAssertTrue(reloaded.notes.isEmpty)
