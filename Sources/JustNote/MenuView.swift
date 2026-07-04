@@ -114,6 +114,10 @@ struct MenuView: View {
             .scrollIndicators(.hidden)
         }
         .padding(12)
+        .contentShape(Rectangle())
+        .contextMenu {
+            sidebarContextMenu
+        }
     }
 
     private func noteSection(_ title: String, notes: [Note], pinned: Bool) -> some View {
@@ -157,6 +161,14 @@ struct MenuView: View {
                         )
                     )
             }
+        }
+    }
+
+    private var sidebarContextMenu: some View {
+        Button {
+            createNote()
+        } label: {
+            Label("New Note", systemImage: "square.and.pencil")
         }
     }
 
