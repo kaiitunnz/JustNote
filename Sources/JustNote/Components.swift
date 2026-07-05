@@ -62,24 +62,6 @@ struct JustNoteMark: Shape {
     }
 }
 
-enum MenuBarIcon {
-    static func image() -> NSImage {
-        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: true) { rect in
-            guard let context = NSGraphicsContext.current?.cgContext else { return false }
-            let path = JustNoteMark().path(in: rect).cgPath
-            context.addPath(path)
-            context.setStrokeColor(NSColor.labelColor.cgColor)
-            context.setLineWidth(1.7)
-            context.setLineCap(.round)
-            context.setLineJoin(.round)
-            context.strokePath()
-            return true
-        }
-        image.isTemplate = true
-        return image
-    }
-}
-
 func resignTextFocus() {
     NSApp.keyWindow?.makeFirstResponder(nil)
 }

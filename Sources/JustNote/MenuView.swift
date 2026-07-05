@@ -391,7 +391,7 @@ struct MenuView: View {
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Delete")
         alert.addButton(withTitle: "Cancel")
-        let response = AppDelegate.shared?.statusItemController.withDismissHandlersSuspended {
+        let response = AppDelegate.shared?.panelController.withDismissSuspended {
             alert.runModal()
         } ?? alert.runModal()
         guard response == .alertFirstButtonReturn else { return }

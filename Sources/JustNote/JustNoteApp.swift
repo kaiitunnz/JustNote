@@ -8,7 +8,7 @@ struct JustNoteApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        // Placeholder scene: all real UI is AppKit-managed (the status-item popover and, for
+        // Placeholder scene: all real UI is AppKit-managed (the summoned note panel and, for
         // settings, an AppKit window). A SwiftUI `Settings` scene does not materialize a window
         // when opened from this accessory app on macOS 27 (the `showSettingsWindow:` action
         // reports handled but no window appears), so the app-settings command is rerouted to the
@@ -31,16 +31,17 @@ extension KeyboardShortcuts.Name {
     static let togglePanel = Self("togglePanel", default: .init(.period, modifiers: [.option]))
 }
 
-/// Owns the app lifecycle: menu-bar-only at rest, a Dock icon only while the Settings window is
-/// open, and a soft ⌘Q that hides back to the menu bar. Only the panel's Quit button (which sets
-/// `isQuitting`) fully terminates; system logout/shutdown is never vetoed.
+/// Owns the app lifecycle: an accessory (background) app at rest, a Dock icon only while the
+/// Settings window is open, and a soft ⌘Q that hides Settings back to the background. Only the
+/// panel's Quit button (which sets `isQuitting`) fully terminates; system logout/shutdown is
+/// never vetoed.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// NSApp.delegate is SwiftUI's internal wrapper (not this instance), so views and the
-    /// status-item controller reach the adaptor through this reference.
+    /// panel controller reach the adaptor through this reference.
     static private(set) var shared: AppDelegate?
 
     var isQuitting = false
-    private(set) var statusItemController: StatusItemController!
+    private(set) var panelController: PanelController!
     private var model: AppModel!
     private var settingsWindow: NSWindow?
 
@@ -52,9 +53,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         model = AppModel()
-        statusItemController = StatusItemController(model: model)
+        panelController = PanelController(model: model)
         KeyboardShortcuts.onKeyUp(for: .togglePanel) {
-            AppDelegate.shared?.statusItemController.togglePopover()
+            AppDelegate.shared?.panelController.toggle()
         }
         NotificationCenter.default.addObserver(
             self,
@@ -62,6 +63,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: NSWindow.willCloseNotification,
             object: nil
         )
+        // With no menu-bar icon, launching the app is the pointer-driven entry point: open Settings
+        // so the shortcut is discoverable rather than leaving the user with an invisible app.
+        openSettings()
     }
 
     /// Opens the settings window, creating it once and reusing it thereafter. Flips to `.regular`
@@ -70,7 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// SwiftUI `Settings` scene won't open programmatically from an accessory app here.
     @MainActor
     func openSettings() {
-        statusItemController?.closePopover()
+        panelController?.close()
         prepareToShowWindow()
         if settingsWindow == nil {
             let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView()))
@@ -92,9 +96,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// The status item is itself an always-present window, so `hasVisibleWindows` can't be
-    /// trusted — count titled windows instead (miniaturized ones included, so a Dock click
-    /// deminiaturizes rather than reopening Settings on top).
+    /// Reopen/terminate logic keys off the Settings window specifically, so count titled windows
+    /// (miniaturized ones included, so a Dock click deminiaturizes rather than reopening Settings
+    /// on top). The summoned note panel is borderless, so it never counts here.
     private var hasTitledWindow: Bool {
         NSApp.windows.contains {
             $0.styleMask.contains(.titled) && ($0.isVisible || $0.isMiniaturized)
