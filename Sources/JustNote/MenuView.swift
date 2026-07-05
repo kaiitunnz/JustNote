@@ -54,6 +54,8 @@ struct MenuView: View {
                     .padding(7)
             }
             .frame(width: 34, height: 34)
+            .contentShape(Rectangle())
+            .onTapGesture { model.collapseSelectionToPrimary() }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("JustNote")
@@ -63,8 +65,13 @@ struct MenuView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
+            .contentShape(Rectangle())
+            .onTapGesture { model.collapseSelectionToPrimary() }
 
-            Spacer()
+            Color.clear
+                .frame(maxWidth: .infinity, maxHeight: 34)
+                .contentShape(Rectangle())
+                .onTapGesture { model.collapseSelectionToPrimary() }
 
             if let error = model.lastError {
                 Text(error)
@@ -72,6 +79,8 @@ struct MenuView: View {
                     .foregroundStyle(Theme.error)
                     .lineLimit(1)
                     .frame(maxWidth: 220, alignment: .trailing)
+                    .contentShape(Rectangle())
+                    .onTapGesture { model.collapseSelectionToPrimary() }
             }
 
             Button(action: createNote) {
@@ -295,13 +304,20 @@ struct MenuView: View {
                     Image(systemName: note.pinned ? "pin.fill" : "doc.text")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(note.pinned ? Theme.pinned : Theme.accent)
+                        .contentShape(Rectangle())
+                        .onTapGesture { model.collapseSelectionToPrimary() }
                     VStack(alignment: .leading, spacing: 1) {
                         Text(note.title)
                             .font(Theme.rounded(13, weight: .semibold))
                             .lineLimit(1)
                         TimestampText(date: note.updatedAt)
                     }
-                    Spacer()
+                    .contentShape(Rectangle())
+                    .onTapGesture { model.collapseSelectionToPrimary() }
+                    Color.clear
+                        .frame(maxWidth: .infinity, maxHeight: 32)
+                        .contentShape(Rectangle())
+                        .onTapGesture { model.collapseSelectionToPrimary() }
                     if !isPreviewing {
                         Button {
                             wrapLines.toggle()
@@ -405,6 +421,7 @@ struct MenuView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+        .simultaneousGesture(TapGesture().onEnded { model.collapseSelectionToPrimary() })
     }
 
     private func createNote() {
