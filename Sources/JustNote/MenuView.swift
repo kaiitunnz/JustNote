@@ -255,7 +255,7 @@ struct MenuView: View {
         Button {
             model.revealNotesInFinder(targetIDs)
         } label: {
-            Label(count == 1 ? "Reveal in Finder" : "Reveal Selected", systemImage: "folder")
+            Label(count == 1 ? "Reveal in Finder" : "Reveal Selected in Finder", systemImage: "folder")
         }
 
         Button {
