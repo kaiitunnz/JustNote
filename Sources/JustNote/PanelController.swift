@@ -82,7 +82,6 @@ final class PanelController: NSObject {
         installEscapeMonitor()
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
-        panel.makeKey()
         shownAt = Date()
     }
 
@@ -146,6 +145,9 @@ extension PanelController: NSWindowDelegate {
         DispatchQueue.main.async { [weak self] in
             guard let self, self.panel.isVisible, !self.dismissSuspended else { return }
             if let shownAt = self.shownAt, Date().timeIntervalSince(shownAt) < self.showGrace { return }
+            // The panel regained key by the time this runs (e.g. an app-modal alert opened and
+            // closed): a stale resign event must not close it.
+            if NSApp.keyWindow == self.panel { return }
             if let key = NSApp.keyWindow, key != self.panel { return }
             if let main = NSApp.mainWindow, main != self.panel { return }
             self.close()
