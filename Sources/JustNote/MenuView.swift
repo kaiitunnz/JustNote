@@ -114,6 +114,10 @@ struct MenuView: View {
             .scrollIndicators(.hidden)
         }
         .padding(12)
+        .contentShape(Rectangle())
+        .contextMenu {
+            sidebarContextMenu
+        }
     }
 
     private func noteSection(_ title: String, notes: [Note], pinned: Bool) -> some View {
@@ -129,6 +133,9 @@ struct MenuView: View {
                         selected: note.id == model.selectedNoteID
                     )
                     .onTapGesture { model.select(note.id) }
+                    .contextMenu {
+                        noteContextMenu(note, pinned: pinned)
+                    }
                     .onDrag {
                         draggingNoteID = note.id
                         return NSItemProvider(object: note.id.uuidString as NSString)
@@ -154,6 +161,95 @@ struct MenuView: View {
                         )
                     )
             }
+        }
+    }
+
+    @ViewBuilder
+    private var sidebarContextMenu: some View {
+        Button {
+            createNote()
+        } label: {
+            Label("New Note", systemImage: "square.and.pencil")
+        }
+
+        Button {
+            pasteAsNewNote()
+        } label: {
+            Label("Paste as New Note", systemImage: "doc.on.clipboard")
+        }
+        .disabled(pasteboardText == nil)
+    }
+
+    @ViewBuilder
+    private func noteContextMenu(_ note: Note, pinned: Bool) -> some View {
+        Button {
+            model.togglePin(note.id)
+        } label: {
+            Label(note.pinned ? "Unpin Note" : "Pin Note", systemImage: note.pinned ? "pin.slash" : "pin")
+        }
+
+        Divider()
+
+        Button {
+            moveNote(note, pinned: pinned, toEdge: .top)
+        } label: {
+            Label("Move to Top", systemImage: "arrow.up.to.line")
+        }
+        .disabled(!canMoveNote(note, pinned: pinned, direction: -1))
+
+        Button {
+            moveNote(note, pinned: pinned, direction: -1)
+        } label: {
+            Label("Move Up", systemImage: "arrow.up")
+        }
+        .disabled(!canMoveNote(note, pinned: pinned, direction: -1))
+
+        Button {
+            moveNote(note, pinned: pinned, direction: 1)
+        } label: {
+            Label("Move Down", systemImage: "arrow.down")
+        }
+        .disabled(!canMoveNote(note, pinned: pinned, direction: 1))
+
+        Button {
+            moveNote(note, pinned: pinned, toEdge: .bottom)
+        } label: {
+            Label("Move to Bottom", systemImage: "arrow.down.to.line")
+        }
+        .disabled(!canMoveNote(note, pinned: pinned, direction: 1))
+
+        Divider()
+
+        Button {
+            model.duplicateNote(note.id)
+        } label: {
+            Label("Duplicate Note", systemImage: "plus.square.on.square")
+        }
+
+        Button {
+            model.revealNoteInFinder(note.id)
+        } label: {
+            Label("Reveal in Finder", systemImage: "folder")
+        }
+
+        Button {
+            copyTitle(note)
+        } label: {
+            Label("Copy Title", systemImage: "doc.on.doc")
+        }
+
+        Button {
+            copyContents(note)
+        } label: {
+            Label("Copy Note Contents", systemImage: "doc.text")
+        }
+
+        Divider()
+
+        Button(role: .destructive) {
+            requestDeleteNote(note)
+        } label: {
+            Label("Delete Note...", systemImage: "trash")
         }
     }
 
@@ -285,6 +381,10 @@ struct MenuView: View {
 
     private func requestDeleteSelectedNote() {
         guard let note = model.selectedNote else { return }
+        requestDeleteNote(note)
+    }
+
+    private func requestDeleteNote(_ note: Note) {
         let alert = NSAlert()
         alert.messageText = "Delete note?"
         alert.informativeText = "Delete \"\(note.title)\"? This cannot be undone."
@@ -295,7 +395,49 @@ struct MenuView: View {
             alert.runModal()
         } ?? alert.runModal()
         guard response == .alertFirstButtonReturn else { return }
-        model.deleteSelectedNote()
+        model.deleteNote(note.id)
+    }
+
+    private func copyTitle(_ note: Note) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(note.title, forType: .string)
+    }
+
+    private func copyContents(_ note: Note) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(note.body, forType: .string)
+    }
+
+    private func pasteAsNewNote() {
+        guard let text = pasteboardText else { return }
+        isPreviewing = false
+        model.createNote(body: text)
+    }
+
+    private var pasteboardText: String? {
+        guard let text = NSPasteboard.general.string(forType: .string), !text.isEmpty else { return nil }
+        return text
+    }
+
+    private func canMoveNote(_ note: Note, pinned: Bool, direction: Int) -> Bool {
+        if pinned {
+            return model.canMovePinnedNote(note.id, direction: direction)
+        }
+        return model.canMoveUnpinnedNote(note.id, direction: direction)
+    }
+
+    private func moveNote(_ note: Note, pinned: Bool, direction: Int) {
+        if pinned {
+            model.movePinnedNote(note.id, direction: direction)
+        } else {
+            model.moveUnpinnedNote(note.id, direction: direction)
+        }
+    }
+
+    private func moveNote(_ note: Note, pinned: Bool, toEdge edge: SectionEdge) {
+        let notes = pinned ? model.pinnedNotes : model.unpinnedNotes
+        guard let targetIndex = edge.targetIndex(in: notes) else { return }
+        model.moveNote(note.id, inPinnedSection: pinned, toIndex: targetIndex)
     }
 
     private func toggleSidebar() {
@@ -417,6 +559,20 @@ private struct Splitter: View {
             } else {
                 NSCursor.pop()
             }
+        }
+    }
+}
+
+private enum SectionEdge {
+    case top
+    case bottom
+
+    func targetIndex(in notes: [Note]) -> Int? {
+        switch self {
+        case .top:
+            return notes.isEmpty ? nil : 0
+        case .bottom:
+            return notes.indices.last
         }
     }
 }

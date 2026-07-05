@@ -80,10 +80,18 @@ final class StatusItemController: NSObject {
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
             guard let self else { return event }
             let clickWindow = event.window
-            // A click on the status button routes here too; leave it to the button's own toggle so
-            // we don't close-then-reopen. Clicks inside the popover keep it open.
-            if clickWindow != self.statusItem.button?.window,
-               clickWindow != self.popover.contentViewController?.view.window {
+            if clickWindow == self.statusItem.button?.window {
+                // A click on the status button routes here too; leave it to the button's own toggle
+                // so we don't close-then-reopen — except a *synthesized* click, which macOS posts to
+                // the button when Space/Return is pressed inside the open panel (it hands the first
+                // keystroke to the menu-bar item), whose action would toggle the panel shut. Real
+                // clicks come from the HID system, so drop button clicks that aren't hardware-generated.
+                if let sourceState = event.cgEvent?.getIntegerValueField(.eventSourceStateID),
+                   sourceState != CGEventSourceStateID.hidSystemState.rawValue {
+                    return nil
+                }
+            } else if clickWindow != self.popover.contentViewController?.view.window {
+                // A click anywhere but inside the popover dismisses it.
                 self.popover.performClose(nil)
             }
             return event
