@@ -2,14 +2,21 @@ import AppKit
 import Foundation
 import SwiftUI
 
+enum NoteSectionEdge {
+    case top
+    case bottom
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     @Published private(set) var notes: [Note]
     @Published private(set) var selectedNoteID: UUID?
+    @Published private(set) var selectedNoteIDs: Set<UUID>
     @Published private(set) var noteOrderIDs: [UUID]
     @Published var lastError: String?
 
     private let store: NoteStore
+    private var selectionAnchorID: UUID?
 
     init(store: NoteStore? = nil) {
         var resolvedStore: NoteStore
@@ -27,6 +34,8 @@ final class AppModel: ObservableObject {
         self.store = resolvedStore
         notes = snapshot.notes
         selectedNoteID = snapshot.selectedNoteID
+        selectedNoteIDs = snapshot.selectedNoteID.map { [$0] } ?? []
+        selectionAnchorID = snapshot.selectedNoteID
         noteOrderIDs = Self.sanitizedOrder(snapshot.noteOrderIDs, notes: snapshot.notes)
         lastError = loadError
 
@@ -34,13 +43,21 @@ final class AppModel: ObservableObject {
             createNote()
         } else if selectedNoteID == nil {
             selectedNoteID = orderedNotes.first?.id
+            selectedNoteIDs = selectedNoteID.map { [$0] } ?? []
+            selectionAnchorID = selectedNoteID
             save()
+        } else {
+            cleanupSelection()
         }
     }
 
     var selectedNote: Note? {
         guard let selectedNoteID else { return nil }
         return notes.first { $0.id == selectedNoteID }
+    }
+
+    var selectedNotesInDisplayOrder: [Note] {
+        notesInDisplayOrder(for: selectedNoteIDs)
     }
 
     var orderedNotes: [Note] {
@@ -68,33 +85,114 @@ final class AppModel: ObservableObject {
         let note = Note(body: body, createdAt: now, updatedAt: now)
         notes.append(note)
         noteOrderIDs.insert(note.id, at: firstUnpinnedOrderIndex)
-        selectedNoteID = note.id
+        setPrimarySelection(note.id, selectedIDs: [note.id], anchorID: note.id)
         save()
     }
 
     func duplicateNote(_ noteID: UUID) {
-        guard let note = notes.first(where: { $0.id == noteID }) else { return }
-        createNote(body: note.body)
+        duplicateNotes([noteID])
+    }
+
+    func duplicateNotes(_ noteIDs: Set<UUID>) {
+        let originals = notesInDisplayOrder(for: noteIDs)
+        guard !originals.isEmpty else { return }
+        let now = Date()
+        let duplicates = originals.map { Note(body: $0.body, createdAt: now, updatedAt: now) }
+        notes.append(contentsOf: duplicates)
+        let duplicateIDs = duplicates.map(\.id)
+        noteOrderIDs.insert(contentsOf: duplicateIDs, at: firstUnpinnedOrderIndex)
+        if let primaryID = duplicateIDs.last {
+            setPrimarySelection(primaryID, selectedIDs: Set(duplicateIDs), anchorID: primaryID)
+        }
+        save()
     }
 
     func deleteSelectedNote() {
-        guard let selectedNoteID else { return }
-        deleteNote(selectedNoteID)
+        deleteNotes(activeSelectionIDs)
     }
 
     func deleteNote(_ noteID: UUID) {
-        guard notes.contains(where: { $0.id == noteID }) else { return }
-        notes.removeAll { $0.id == noteID }
-        noteOrderIDs.removeAll { $0 == noteID }
-        if selectedNoteID == nil || !notes.contains(where: { $0.id == selectedNoteID }) {
-            selectedNoteID = orderedNotes.first?.id
+        deleteNotes([noteID])
+    }
+
+    func deleteNotes(_ noteIDs: Set<UUID>) {
+        let noteIDs = noteIDs.intersection(notes.map(\.id))
+        guard !noteIDs.isEmpty else { return }
+
+        let originalOrder = orderedNotes.map(\.id)
+        let deletedIndices = originalOrder.indices.filter { noteIDs.contains(originalOrder[$0]) }
+        notes.removeAll { noteIDs.contains($0.id) }
+        noteOrderIDs.removeAll { noteIDs.contains($0) }
+
+        if let selectedNoteID, notes.contains(where: { $0.id == selectedNoteID }) {
+            let survivingSelection = selectedNoteIDs
+                .subtracting(noteIDs)
+                .intersection(notes.map(\.id))
+            setPrimarySelection(selectedNoteID, selectedIDs: survivingSelection.union([selectedNoteID]), anchorID: selectedNoteID)
+        } else {
+            let nextSelection = replacementSelection(afterDeletingIndices: deletedIndices)
+            setPrimarySelection(nextSelection, selectedIDs: nextSelection.map { [$0] } ?? [], anchorID: nextSelection)
         }
         save()
     }
 
     func select(_ noteID: UUID) {
+        selectOnly(noteID)
+    }
+
+    func selectOnly(_ noteID: UUID) {
         guard notes.contains(where: { $0.id == noteID }) else { return }
-        selectedNoteID = noteID
+        setPrimarySelection(noteID, selectedIDs: [noteID], anchorID: noteID)
+        save()
+    }
+
+    func toggleSelection(_ noteID: UUID) {
+        guard notes.contains(where: { $0.id == noteID }) else { return }
+        if selectedNoteIDs.contains(noteID) {
+            guard noteID != selectedNoteID, selectedNoteIDs.count > 1 else {
+                setPrimarySelection(noteID, selectedIDs: selectedNoteIDs.union([noteID]), anchorID: noteID)
+                save()
+                return
+            }
+            selectedNoteIDs.remove(noteID)
+            selectionAnchorID = selectedNoteID
+        } else {
+            selectedNoteIDs.insert(noteID)
+            selectedNoteID = noteID
+            selectionAnchorID = noteID
+        }
+        cleanupSelection()
+        save()
+    }
+
+    func selectRange(to noteID: UUID) {
+        let orderedIDs = orderedNotes.map(\.id)
+        guard
+            let targetIndex = orderedIDs.firstIndex(of: noteID),
+            let anchorID = validAnchorID(fallback: noteID),
+            let anchorIndex = orderedIDs.firstIndex(of: anchorID)
+        else { return }
+
+        let bounds = min(anchorIndex, targetIndex)...max(anchorIndex, targetIndex)
+        setPrimarySelection(noteID, selectedIDs: Set(orderedIDs[bounds]), anchorID: anchorID)
+        save()
+    }
+
+    func collapseSelectionToPrimary() {
+        guard let selectedNoteID, selectedNoteIDs != [selectedNoteID] else { return }
+        setPrimarySelection(selectedNoteID, selectedIDs: [selectedNoteID], anchorID: selectedNoteID)
+        save()
+    }
+
+    func selectAllNotes() {
+        let orderedIDs = orderedNotes.map(\.id)
+        guard !orderedIDs.isEmpty else {
+            setPrimarySelection(nil, selectedIDs: [], anchorID: nil)
+            save()
+            return
+        }
+        let primaryID = selectedNoteID.flatMap { orderedIDs.contains($0) ? $0 : nil } ?? orderedIDs[0]
+        setPrimarySelection(primaryID, selectedIDs: Set(orderedIDs), anchorID: primaryID)
         save()
     }
 
@@ -130,54 +228,93 @@ final class AppModel: ObservableObject {
     }
 
     func togglePinSelected() {
-        guard let selectedNoteID, let index = notes.firstIndex(where: { $0.id == selectedNoteID }) else { return }
-        togglePin(selectedNoteID, at: index)
+        let targets = activeSelectionIDs
+        guard !targets.isEmpty else { return }
+        let targetNotes = notesInDisplayOrder(for: targets)
+        let shouldPin = !targetNotes.allSatisfy(\.pinned)
+        setPinned(targets, pinned: shouldPin)
     }
 
     func togglePin(_ noteID: UUID) {
-        guard let index = notes.firstIndex(where: { $0.id == noteID }) else { return }
-        togglePin(noteID, at: index)
+        guard let note = notes.first(where: { $0.id == noteID }) else { return }
+        setPinned([noteID], pinned: !note.pinned)
     }
 
-    private func togglePin(_ noteID: UUID, at index: Int) {
-        notes[index].pinned.toggle()
-        notes[index].updatedAt = Date()
-        noteOrderIDs.removeAll { $0 == noteID }
-        if notes[index].pinned {
-            noteOrderIDs.insert(noteID, at: 0)
-        } else {
-            noteOrderIDs.insert(noteID, at: firstUnpinnedOrderIndex)
+    func setPinned(_ noteIDs: Set<UUID>, pinned: Bool) {
+        let targetIDs = notesInDisplayOrder(for: noteIDs).map(\.id)
+        guard !targetIDs.isEmpty else { return }
+        let targetSet = Set(targetIDs)
+        let now = Date()
+        for index in notes.indices where targetSet.contains(notes[index].id) && notes[index].pinned != pinned {
+            notes[index].pinned = pinned
+            notes[index].updatedAt = now
         }
+        rebuildOrder(moving: targetIDs, pinned: pinned)
+        cleanupSelection()
         save()
     }
 
     func movePinnedNote(_ noteID: UUID, direction: Int) {
-        guard let index = pinnedNotes.firstIndex(where: { $0.id == noteID }) else { return }
-        moveNote(noteID, inPinnedSection: true, toIndex: index + direction)
+        moveNotes([noteID], inPinnedSection: true, direction: direction)
     }
 
     func moveUnpinnedNote(_ noteID: UUID, direction: Int) {
-        guard let index = unpinnedNotes.firstIndex(where: { $0.id == noteID }) else { return }
-        moveNote(noteID, inPinnedSection: false, toIndex: index + direction)
-    }
-
-    func canMovePinnedNote(_ noteID: UUID, direction: Int) -> Bool {
-        canMove(noteID, in: pinnedNotes, direction: direction)
-    }
-
-    func canMoveUnpinnedNote(_ noteID: UUID, direction: Int) -> Bool {
-        canMove(noteID, in: unpinnedNotes, direction: direction)
+        moveNotes([noteID], inPinnedSection: false, direction: direction)
     }
 
     func moveNote(_ noteID: UUID, inPinnedSection pinned: Bool, toIndex requestedIndex: Int) {
+        moveNotes([noteID], inPinnedSection: pinned, toIndex: requestedIndex)
+    }
+
+    func moveNotes(_ noteIDs: Set<UUID>, inPinnedSection pinned: Bool, direction: Int) {
+        let section = pinned ? pinnedNotes : unpinnedNotes
+        guard let range = contiguousRange(for: noteIDs, in: section), canMove(range: range, in: section, direction: direction) else {
+            return
+        }
+        moveNotes(noteIDs, inPinnedSection: pinned, toIndex: range.lowerBound + direction)
+    }
+
+    func canMoveNotes(_ noteIDs: Set<UUID>, inPinnedSection pinned: Bool, direction: Int) -> Bool {
+        let section = pinned ? pinnedNotes : unpinnedNotes
+        guard let range = contiguousRange(for: noteIDs, in: section) else { return false }
+        return canMove(range: range, in: section, direction: direction)
+    }
+
+    func canMoveNotesToEdge(_ noteIDs: Set<UUID>, inPinnedSection pinned: Bool, edge: NoteSectionEdge) -> Bool {
+        let section = pinned ? pinnedNotes : unpinnedNotes
+        guard let range = contiguousRange(for: noteIDs, in: section) else { return false }
+        switch edge {
+        case .top:
+            return range.lowerBound > 0
+        case .bottom:
+            return range.upperBound < section.count - 1
+        }
+    }
+
+    func moveNotes(_ noteIDs: Set<UUID>, inPinnedSection pinned: Bool, toEdge edge: NoteSectionEdge) {
+        let section = pinned ? pinnedNotes : unpinnedNotes
+        guard canMoveNotesToEdge(noteIDs, inPinnedSection: pinned, edge: edge) else { return }
+        switch edge {
+        case .top:
+            moveNotes(noteIDs, inPinnedSection: pinned, toIndex: 0)
+        case .bottom:
+            moveNotes(noteIDs, inPinnedSection: pinned, toIndex: section.count - 1)
+        }
+    }
+
+    func moveNotes(_ noteIDs: Set<UUID>, inPinnedSection pinned: Bool, toIndex requestedIndex: Int) {
         var sectionIDs = (pinned ? pinnedNotes : unpinnedNotes).map(\.id)
-        guard let currentIndex = sectionIDs.firstIndex(of: noteID) else { return }
+        let targetIDs = sectionIDs.filter { noteIDs.contains($0) }
+        guard
+            targetIDs.count == noteIDs.count,
+            let range = contiguousRange(for: noteIDs, in: pinned ? pinnedNotes : unpinnedNotes)
+        else { return }
 
-        let targetIndex = min(max(requestedIndex, 0), sectionIDs.count - 1)
-        guard currentIndex != targetIndex else { return }
+        let targetIndex = min(max(requestedIndex, 0), sectionIDs.count - targetIDs.count)
+        guard range.lowerBound != targetIndex else { return }
 
-        sectionIDs.remove(at: currentIndex)
-        sectionIDs.insert(noteID, at: targetIndex)
+        sectionIDs.removeAll { noteIDs.contains($0) }
+        sectionIDs.insert(contentsOf: targetIDs, at: targetIndex)
         rebuildOrder(sectionIDs: sectionIDs, pinned: pinned)
         save()
     }
@@ -195,14 +332,14 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func revealNoteInFinder(_ noteID: UUID) {
-        guard let note = notes.first(where: { $0.id == noteID }) else { return }
-        let noteURL = store.noteBodyURL(for: note)
-        guard FileManager.default.fileExists(atPath: noteURL.path) else {
-            lastError = "Reveal note failed: \(noteURL.lastPathComponent) does not exist"
+    func revealNotesInFinder(_ noteIDs: Set<UUID>) {
+        let noteURLs = notesInDisplayOrder(for: noteIDs).map { store.noteBodyURL(for: $0) }
+        guard !noteURLs.isEmpty else { return }
+        if let missingURL = noteURLs.first(where: { !FileManager.default.fileExists(atPath: $0.path) }) {
+            lastError = "Reveal note failed: \(missingURL.lastPathComponent) does not exist"
             return
         }
-        NSWorkspace.shared.activateFileViewerSelecting([noteURL])
+        NSWorkspace.shared.activateFileViewerSelecting(noteURLs)
         lastError = nil
     }
 
@@ -236,6 +373,15 @@ final class AppModel: ObservableObject {
         )
     }
 
+    func notesInDisplayOrder(for noteIDs: Set<UUID>) -> [Note] {
+        guard !noteIDs.isEmpty else { return [] }
+        return orderedNotes.filter { noteIDs.contains($0.id) }
+    }
+
+    func actionTargetIDs(containing noteID: UUID) -> Set<UUID> {
+        selectedNoteIDs.contains(noteID) ? selectedNoteIDs : [noteID]
+    }
+
     private func orderedNotes(pinned: Bool) -> [Note] {
         let byID = Dictionary(uniqueKeysWithValues: notes.map { ($0.id, $0) })
         return noteOrderIDs.compactMap { byID[$0] }.filter { $0.pinned == pinned }
@@ -251,9 +397,89 @@ final class AppModel: ObservableObject {
         noteOrderIDs = pinned ? sectionIDs + otherIDs : otherIDs + sectionIDs
     }
 
-    private func canMove(_ noteID: UUID, in section: [Note], direction: Int) -> Bool {
-        guard let index = section.firstIndex(where: { $0.id == noteID }) else { return false }
-        return section.indices.contains(index + direction)
+    private func rebuildOrder(moving targetIDs: [UUID], pinned: Bool) {
+        let targetSet = Set(targetIDs)
+        let currentPinnedIDs = orderedNotes.filter(\.pinned).map(\.id).filter { !targetSet.contains($0) }
+        let currentUnpinnedIDs = orderedNotes.filter { !$0.pinned }.map(\.id).filter { !targetSet.contains($0) }
+        if pinned {
+            noteOrderIDs = targetIDs + currentPinnedIDs + currentUnpinnedIDs
+        } else {
+            noteOrderIDs = currentPinnedIDs + targetIDs + currentUnpinnedIDs
+        }
+    }
+
+    private func contiguousRange(for noteIDs: Set<UUID>, in section: [Note]) -> ClosedRange<Int>? {
+        guard !noteIDs.isEmpty else { return nil }
+        let indices = section.indices.filter { noteIDs.contains(section[$0].id) }
+        guard indices.count == noteIDs.count, let first = indices.first, let last = indices.last else { return nil }
+        guard last - first + 1 == indices.count else { return nil }
+        return first...last
+    }
+
+    private func canMove(range: ClosedRange<Int>, in section: [Note], direction: Int) -> Bool {
+        if direction < 0 {
+            return range.lowerBound > section.startIndex
+        }
+        if direction > 0 {
+            return range.upperBound < section.index(before: section.endIndex)
+        }
+        return false
+    }
+
+    private var activeSelectionIDs: Set<UUID> {
+        if !selectedNoteIDs.isEmpty { return selectedNoteIDs }
+        return selectedNoteID.map { [$0] } ?? []
+    }
+
+    private func setPrimarySelection(_ noteID: UUID?, selectedIDs: Set<UUID>, anchorID: UUID?) {
+        selectedNoteID = noteID
+        if let noteID {
+            selectedNoteIDs = selectedIDs.union([noteID])
+        } else {
+            selectedNoteIDs = []
+        }
+        selectionAnchorID = anchorID
+        cleanupSelection()
+    }
+
+    private func cleanupSelection() {
+        let noteIDs = Set(notes.map(\.id))
+        if selectedNoteID.map({ !noteIDs.contains($0) }) ?? false {
+            selectedNoteID = orderedNotes.first?.id
+        }
+        selectedNoteIDs = selectedNoteIDs.intersection(noteIDs)
+        if let selectedNoteID {
+            selectedNoteIDs.insert(selectedNoteID)
+        } else {
+            selectedNoteIDs = []
+        }
+        if selectionAnchorID.map({ !noteIDs.contains($0) }) ?? false {
+            selectionAnchorID = selectedNoteID
+        }
+    }
+
+    private func validAnchorID(fallback: UUID) -> UUID? {
+        if let selectionAnchorID, notes.contains(where: { $0.id == selectionAnchorID }) {
+            return selectionAnchorID
+        }
+        if let selectedNoteID, notes.contains(where: { $0.id == selectedNoteID }) {
+            return selectedNoteID
+        }
+        return notes.contains(where: { $0.id == fallback }) ? fallback : nil
+    }
+
+    private func replacementSelection(afterDeletingIndices deletedIndices: [Int]) -> UUID? {
+        let newOrder = orderedNotes.map(\.id)
+        guard !newOrder.isEmpty else { return nil }
+        let firstDeletedIndex = deletedIndices.min() ?? 0
+        if newOrder.indices.contains(firstDeletedIndex) {
+            return newOrder[firstDeletedIndex]
+        }
+        let previousIndex = firstDeletedIndex - 1
+        if newOrder.indices.contains(previousIndex) {
+            return newOrder[previousIndex]
+        }
+        return newOrder[0]
     }
 
     private func save() {
