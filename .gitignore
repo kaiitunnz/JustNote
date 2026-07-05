@@ -12,5 +12,6 @@ xcuserdata/
 .build/
 .swiftpm/
 
-# Dev tools
-.claude/
+# Dev tools — keep local settings out, but share committed skills
+.claude/*
+!.claude/skills/
