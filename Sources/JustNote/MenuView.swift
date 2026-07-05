@@ -100,8 +100,7 @@ struct MenuView: View {
             .disabled(!hasSelectedNotes)
         }
         .padding(14)
-        .contentShape(Rectangle())
-        .onTapGesture { model.collapseSelectionToPrimary() }
+        .collapsesSelectionOnTap(model)
     }
 
     private var sidebar: some View {
@@ -116,8 +115,7 @@ struct MenuView: View {
             .scrollIndicators(.hidden)
         }
         .padding(12)
-        .contentShape(Rectangle())
-        .onTapGesture { model.collapseSelectionToPrimary() }
+        .collapsesSelectionOnTap(model)
         .contextMenu {
             sidebarContextMenu
         }
@@ -323,8 +321,7 @@ struct MenuView: View {
                     .buttonStyle(HeaderIconButtonStyle())
                     .help(isPreviewing ? "Edit note" : "Preview markdown")
                 }
-                .contentShape(Rectangle())
-                .onTapGesture { model.collapseSelectionToPrimary() }
+                .collapsesSelectionOnTap(model)
 
                 Group {
                     if isPreviewing {
@@ -334,15 +331,17 @@ struct MenuView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .contentShape(Rectangle())
+                        // Simultaneous, not collapsesSelectionOnTap, so tapping a Markdown link still opens it.
                         .simultaneousGesture(TapGesture().onEnded { model.collapseSelectionToPrimary() })
                     } else {
                         PlainTextEditor(
                             text: model.bodyBinding(),
                             wrapsLines: wrapLines,
+                            // NSTextView eats clicks at the AppKit layer, so it collapses from its own mouseDown.
                             onInteract: { model.collapseSelectionToPrimary() }
                         )
                         .contentShape(Rectangle())
-                        .onTapGesture { }
+                        .onTapGesture { }  // Swallows editor taps so they don't fall through to the background collapse below.
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -360,6 +359,7 @@ struct MenuView: View {
         }
         .padding(14)
         .background {
+            // Like collapsesSelectionOnTap, but also drops text focus when tapping around the editor.
             Color.clear.contentShape(Rectangle()).onTapGesture {
                 model.collapseSelectionToPrimary()
                 if !isPreviewing { resignTextFocus() }
@@ -409,8 +409,7 @@ struct MenuView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .contentShape(Rectangle())
-        .onTapGesture { model.collapseSelectionToPrimary() }
+        .collapsesSelectionOnTap(model)
     }
 
     private func createNote() {
@@ -758,4 +757,17 @@ private struct TimestampText: View {
         formatter.dateFormat = "MMM d HH:mm"
         return formatter
     }()
+}
+
+private extension View {
+    /// Collapses a transient multi-selection back to the primary note when this region is tapped.
+    /// Applied to every non-card region of the panel (header, sidebar, editor header, footer). It uses
+    /// `onTapGesture` so note cards and buttons keep gesture priority — a tap collapses only when it
+    /// lands on inert chrome, never stealing a card selection or a pin/delete press. The editor
+    /// background additionally resigns text focus, the Markdown preview uses a simultaneous tap so
+    /// links still open, and the plain-text editor collapses from its AppKit `mouseDown` hook.
+    func collapsesSelectionOnTap(_ model: AppModel) -> some View {
+        contentShape(Rectangle())
+            .onTapGesture { model.collapseSelectionToPrimary() }
+    }
 }
