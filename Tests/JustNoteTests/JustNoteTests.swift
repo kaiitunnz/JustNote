@@ -98,6 +98,34 @@ final class JustNoteTests: XCTestCase {
         XCTAssertEqual(model.selectedNoteID, order[0])
     }
 
+    func testMultiSelectionToggleRangeAndSelectAll() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        model.createNote()
+        model.createNote()
+        let order = model.orderedNotes.map(\.id)
+
+        model.selectOnly(order[0])
+        XCTAssertEqual(model.selectedNoteIDs, [order[0]])
+
+        model.toggleSelection(order[1])
+        XCTAssertEqual(model.selectedNoteID, order[1])
+        XCTAssertEqual(model.selectedNoteIDs, [order[0], order[1]])
+
+        model.toggleSelection(order[0])
+        XCTAssertEqual(model.selectedNoteID, order[1])
+        XCTAssertEqual(model.selectedNoteIDs, [order[1]])
+
+        model.selectOnly(order[0])
+        model.selectRange(to: order[2])
+        XCTAssertEqual(model.selectedNoteID, order[2])
+        XCTAssertEqual(model.selectedNoteIDs, Set(order))
+
+        model.selectOnly(order[1])
+        model.selectAllNotes()
+        XCTAssertEqual(model.selectedNoteID, order[1])
+        XCTAssertEqual(model.selectedNoteIDs, Set(order))
+    }
+
     func testSelectAdjacentNoteIsNoOpWithSingleNote() throws {
         let model = AppModel(store: try NoteStore(rootURL: rootURL))
         XCTAssertEqual(model.orderedNotes.count, 1)
@@ -227,6 +255,27 @@ final class JustNoteTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: firstBodyURL.path))
     }
 
+    func testDeletingSelectedNotesChoosesNextVisibleFallback() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        model.updateSelectedBody("First")
+        model.createNote()
+        model.updateSelectedBody("Second")
+        model.createNote()
+        model.updateSelectedBody("Third")
+        model.createNote()
+        model.updateSelectedBody("Fourth")
+        let order = model.orderedNotes.map(\.id)
+        XCTAssertEqual(model.unpinnedNotes.map(\.title), ["Fourth", "Third", "Second", "First"])
+
+        model.selectOnly(order[1])
+        model.toggleSelection(order[2])
+        model.deleteSelectedNote()
+
+        XCTAssertEqual(model.orderedNotes.map(\.id), [order[0], order[3]])
+        XCTAssertEqual(model.selectedNoteID, order[3])
+        XCTAssertEqual(model.selectedNoteIDs, [order[3]])
+    }
+
     func testDeletingSelectedNoteLeavesValidSelectionOrEmptyState() throws {
         let model = AppModel(store: try NoteStore(rootURL: rootURL))
         let firstID = try XCTUnwrap(model.selectedNoteID)
@@ -257,6 +306,69 @@ final class JustNoteTests: XCTestCase {
         let reloaded = AppModel(store: try NoteStore(rootURL: rootURL))
         XCTAssertTrue(reloaded.notes.isEmpty)
         XCTAssertNil(reloaded.selectedNoteID)
+    }
+
+    func testBatchPinningPreservesVisibleOrderAtDestinationTop() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        let firstID = try XCTUnwrap(model.selectedNoteID)
+        model.updateSelectedBody("First")
+        model.createNote()
+        let secondID = try XCTUnwrap(model.selectedNoteID)
+        model.updateSelectedBody("Second")
+        model.createNote()
+        let thirdID = try XCTUnwrap(model.selectedNoteID)
+        model.updateSelectedBody("Third")
+
+        model.setPinned([firstID, thirdID], pinned: true)
+
+        XCTAssertEqual(model.pinnedNotes.map(\.id), [thirdID, firstID])
+        XCTAssertEqual(model.unpinnedNotes.map(\.id), [secondID])
+
+        model.setPinned([firstID, thirdID], pinned: false)
+
+        XCTAssertEqual(model.pinnedNotes.map(\.id), [])
+        XCTAssertEqual(model.unpinnedNotes.map(\.id), [thirdID, firstID, secondID])
+    }
+
+    func testBatchDuplicatePreservesVisibleOrderAndSelectsDuplicates() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        let firstID = try XCTUnwrap(model.selectedNoteID)
+        model.updateSelectedBody("First")
+        model.createNote()
+        let secondID = try XCTUnwrap(model.selectedNoteID)
+        model.updateSelectedBody("Second")
+        model.createNote()
+        let thirdID = try XCTUnwrap(model.selectedNoteID)
+        model.updateSelectedBody("Third")
+
+        model.duplicateNotes([firstID, thirdID])
+
+        let unpinned = model.unpinnedNotes
+        XCTAssertEqual(unpinned.map(\.body), ["Third", "First", "Third", "Second", "First"])
+        XCTAssertEqual(Set(unpinned.prefix(2).map(\.id)), model.selectedNoteIDs)
+        XCTAssertEqual(model.selectedNoteID, unpinned[1].id)
+        XCTAssertNotEqual(unpinned[0].id, thirdID)
+        XCTAssertNotEqual(unpinned[1].id, firstID)
+        XCTAssertEqual(secondID, unpinned[3].id)
+    }
+
+    func testBatchMoveRequiresContiguousSameSectionSelection() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        model.updateSelectedBody("First")
+        model.createNote()
+        model.updateSelectedBody("Second")
+        model.createNote()
+        model.updateSelectedBody("Third")
+        model.createNote()
+        model.updateSelectedBody("Fourth")
+        let order = model.unpinnedNotes.map(\.id)
+        XCTAssertEqual(model.unpinnedNotes.map(\.title), ["Fourth", "Third", "Second", "First"])
+
+        model.moveNotes([order[1], order[2]], inPinnedSection: false, direction: 1)
+        XCTAssertEqual(model.unpinnedNotes.map(\.id), [order[0], order[3], order[1], order[2]])
+
+        model.moveNotes([order[0], order[2]], inPinnedSection: false, direction: 1)
+        XCTAssertEqual(model.unpinnedNotes.map(\.id), [order[0], order[3], order[1], order[2]])
     }
 
     func testNoteBodyURLPointsInsideNotesDirectory() throws {

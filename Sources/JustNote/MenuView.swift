@@ -58,7 +58,7 @@ struct MenuView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("JustNote")
                     .font(Theme.rounded(15, weight: .semibold))
-                Text(model.selectedNote?.title ?? "No note selected")
+                Text(selectionSubtitle)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -82,22 +82,22 @@ struct MenuView: View {
             .help("New note")
 
             Button(action: model.togglePinSelected) {
-                Image(systemName: model.selectedNote?.pinned == true ? "pin.fill" : "pin")
+                Image(systemName: selectedNotesAllPinned ? "pin.fill" : "pin")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(model.selectedNote?.pinned == true ? Theme.pinned : .secondary)
+                    .foregroundStyle(selectedNotesAllPinned ? Theme.pinned : .secondary)
             }
             .buttonStyle(HeaderIconButtonStyle())
-            .help("Pin note")
-            .disabled(model.selectedNote == nil)
+            .help(selectedNotesAllPinned ? "Unpin selected notes" : "Pin selected notes")
+            .disabled(!hasSelectedNotes)
 
-            Button(action: requestDeleteSelectedNote) {
+            Button(action: requestDeleteSelectedNotes) {
                 Image(systemName: "trash")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(HeaderIconButtonStyle())
-            .help("Delete note")
-            .disabled(model.selectedNote == nil)
+            .help("Delete selected notes")
+            .disabled(!hasSelectedNotes)
         }
         .padding(14)
     }
@@ -130,11 +130,12 @@ struct MenuView: View {
                 ForEach(Array(notes.enumerated()), id: \.element.id) { index, note in
                     NoteRow(
                         note: note,
-                        selected: note.id == model.selectedNoteID
+                        selected: model.selectedNoteIDs.contains(note.id),
+                        primary: note.id == model.selectedNoteID
                     )
-                    .onTapGesture { model.select(note.id) }
+                    .onTapGesture { select(note) }
                     .contextMenu {
-                        noteContextMenu(note, pinned: pinned)
+                        noteContextMenu(note, pinned: pinned, targetIDs: model.actionTargetIDs(containing: note.id))
                     }
                     .onDrag {
                         draggingNoteID = note.id
@@ -181,75 +182,99 @@ struct MenuView: View {
     }
 
     @ViewBuilder
-    private func noteContextMenu(_ note: Note, pinned: Bool) -> some View {
-        Button {
-            model.togglePin(note.id)
-        } label: {
-            Label(note.pinned ? "Unpin Note" : "Pin Note", systemImage: note.pinned ? "pin.slash" : "pin")
+    private func noteContextMenu(_ note: Note, pinned: Bool, targetIDs: Set<UUID>) -> some View {
+        let targetNotes = model.notesInDisplayOrder(for: targetIDs)
+        let count = targetNotes.count
+        let allPinned = targetNotes.allSatisfy(\.pinned)
+        let allUnpinned = targetNotes.allSatisfy { !$0.pinned }
+
+        if allPinned {
+            Button {
+                model.setPinned(targetIDs, pinned: false)
+            } label: {
+                Label(count == 1 ? "Unpin Note" : "Unpin Selected Notes", systemImage: "pin.slash")
+            }
+        } else if allUnpinned {
+            Button {
+                model.setPinned(targetIDs, pinned: true)
+            } label: {
+                Label(count == 1 ? "Pin Note" : "Pin Selected Notes", systemImage: "pin")
+            }
+        } else {
+            Button {
+                model.setPinned(targetIDs, pinned: true)
+            } label: {
+                Label("Pin Selected Notes", systemImage: "pin")
+            }
+            Button {
+                model.setPinned(targetIDs, pinned: false)
+            } label: {
+                Label("Unpin Selected Notes", systemImage: "pin.slash")
+            }
         }
 
         Divider()
 
         Button {
-            moveNote(note, pinned: pinned, toEdge: .top)
+            model.moveNotes(targetIDs, inPinnedSection: pinned, toEdge: .top)
         } label: {
-            Label("Move to Top", systemImage: "arrow.up.to.line")
+            Label(count == 1 ? "Move to Top" : "Move Selected to Top", systemImage: "arrow.up.to.line")
         }
-        .disabled(!canMoveNote(note, pinned: pinned, direction: -1))
+        .disabled(!model.canMoveNotesToEdge(targetIDs, inPinnedSection: pinned, edge: .top))
 
         Button {
-            moveNote(note, pinned: pinned, direction: -1)
+            model.moveNotes(targetIDs, inPinnedSection: pinned, direction: -1)
         } label: {
-            Label("Move Up", systemImage: "arrow.up")
+            Label(count == 1 ? "Move Up" : "Move Selected Up", systemImage: "arrow.up")
         }
-        .disabled(!canMoveNote(note, pinned: pinned, direction: -1))
+        .disabled(!model.canMoveNotes(targetIDs, inPinnedSection: pinned, direction: -1))
 
         Button {
-            moveNote(note, pinned: pinned, direction: 1)
+            model.moveNotes(targetIDs, inPinnedSection: pinned, direction: 1)
         } label: {
-            Label("Move Down", systemImage: "arrow.down")
+            Label(count == 1 ? "Move Down" : "Move Selected Down", systemImage: "arrow.down")
         }
-        .disabled(!canMoveNote(note, pinned: pinned, direction: 1))
+        .disabled(!model.canMoveNotes(targetIDs, inPinnedSection: pinned, direction: 1))
 
         Button {
-            moveNote(note, pinned: pinned, toEdge: .bottom)
+            model.moveNotes(targetIDs, inPinnedSection: pinned, toEdge: .bottom)
         } label: {
-            Label("Move to Bottom", systemImage: "arrow.down.to.line")
+            Label(count == 1 ? "Move to Bottom" : "Move Selected to Bottom", systemImage: "arrow.down.to.line")
         }
-        .disabled(!canMoveNote(note, pinned: pinned, direction: 1))
+        .disabled(!model.canMoveNotesToEdge(targetIDs, inPinnedSection: pinned, edge: .bottom))
 
         Divider()
 
         Button {
-            model.duplicateNote(note.id)
+            model.duplicateNotes(targetIDs)
         } label: {
-            Label("Duplicate Note", systemImage: "plus.square.on.square")
+            Label(count == 1 ? "Duplicate Note" : "Duplicate Selected Notes", systemImage: "plus.square.on.square")
         }
 
         Button {
-            model.revealNoteInFinder(note.id)
+            model.revealNotesInFinder(targetIDs)
         } label: {
-            Label("Reveal in Finder", systemImage: "folder")
+            Label(count == 1 ? "Reveal in Finder" : "Reveal Selected in Finder", systemImage: "folder")
         }
 
         Button {
-            copyTitle(note)
+            copyTitles(targetIDs)
         } label: {
-            Label("Copy Title", systemImage: "doc.on.doc")
+            Label(count == 1 ? "Copy Title" : "Copy Selected Titles", systemImage: "doc.on.doc")
         }
 
         Button {
-            copyContents(note)
+            copyContents(targetIDs)
         } label: {
-            Label("Copy Note Contents", systemImage: "doc.text")
+            Label(count == 1 ? "Copy Note Contents" : "Copy Selected Note Contents", systemImage: "doc.text")
         }
 
         Divider()
 
         Button(role: .destructive) {
-            requestDeleteNote(note)
+            requestDeleteNotes(targetIDs)
         } label: {
-            Label("Delete Note...", systemImage: "trash")
+            Label(count == 1 ? "Delete Note..." : "Delete Selected Notes...", systemImage: "trash")
         }
     }
 
@@ -379,15 +404,49 @@ struct MenuView: View {
         model.createNote()
     }
 
-    private func requestDeleteSelectedNote() {
-        guard let note = model.selectedNote else { return }
-        requestDeleteNote(note)
+    private var hasSelectedNotes: Bool {
+        !model.selectedNoteIDs.isEmpty
     }
 
-    private func requestDeleteNote(_ note: Note) {
+    private var selectedNotesAllPinned: Bool {
+        let notes = model.selectedNotesInDisplayOrder
+        return !notes.isEmpty && notes.allSatisfy(\.pinned)
+    }
+
+    private var selectionSubtitle: String {
+        let count = model.selectedNoteIDs.count
+        if count > 1 {
+            return "\(count) notes selected"
+        }
+        return model.selectedNote?.title ?? "No note selected"
+    }
+
+    private func select(_ note: Note) {
+        let modifiers = NSEvent.modifierFlags
+        if modifiers.contains(.shift) {
+            model.selectRange(to: note.id)
+        } else if modifiers.contains(.command) {
+            model.toggleSelection(note.id)
+        } else {
+            model.selectOnly(note.id)
+        }
+    }
+
+    private func requestDeleteSelectedNotes() {
+        requestDeleteNotes(model.selectedNoteIDs)
+    }
+
+    private func requestDeleteNotes(_ noteIDs: Set<UUID>) {
+        let notes = model.notesInDisplayOrder(for: noteIDs)
+        guard !notes.isEmpty else { return }
         let alert = NSAlert()
-        alert.messageText = "Delete note?"
-        alert.informativeText = "Delete \"\(note.title)\"? This cannot be undone."
+        if notes.count == 1 {
+            alert.messageText = "Delete note?"
+            alert.informativeText = "Delete \"\(notes[0].title)\"? This cannot be undone."
+        } else {
+            alert.messageText = "Delete \(notes.count) notes?"
+            alert.informativeText = "This cannot be undone."
+        }
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Delete")
         alert.addButton(withTitle: "Cancel")
@@ -395,17 +454,21 @@ struct MenuView: View {
             alert.runModal()
         } ?? alert.runModal()
         guard response == .alertFirstButtonReturn else { return }
-        model.deleteNote(note.id)
+        model.deleteNotes(noteIDs)
     }
 
-    private func copyTitle(_ note: Note) {
+    private func copyTitles(_ noteIDs: Set<UUID>) {
+        let titles = model.notesInDisplayOrder(for: noteIDs).map(\.title)
+        guard !titles.isEmpty else { return }
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(note.title, forType: .string)
+        NSPasteboard.general.setString(titles.joined(separator: "\n"), forType: .string)
     }
 
-    private func copyContents(_ note: Note) {
+    private func copyContents(_ noteIDs: Set<UUID>) {
+        let contents = model.notesInDisplayOrder(for: noteIDs).map(\.body)
+        guard !contents.isEmpty else { return }
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(note.body, forType: .string)
+        NSPasteboard.general.setString(contents.joined(separator: "\n\n"), forType: .string)
     }
 
     private func pasteAsNewNote() {
@@ -417,27 +480,6 @@ struct MenuView: View {
     private var pasteboardText: String? {
         guard let text = NSPasteboard.general.string(forType: .string), !text.isEmpty else { return nil }
         return text
-    }
-
-    private func canMoveNote(_ note: Note, pinned: Bool, direction: Int) -> Bool {
-        if pinned {
-            return model.canMovePinnedNote(note.id, direction: direction)
-        }
-        return model.canMoveUnpinnedNote(note.id, direction: direction)
-    }
-
-    private func moveNote(_ note: Note, pinned: Bool, direction: Int) {
-        if pinned {
-            model.movePinnedNote(note.id, direction: direction)
-        } else {
-            model.moveUnpinnedNote(note.id, direction: direction)
-        }
-    }
-
-    private func moveNote(_ note: Note, pinned: Bool, toEdge edge: SectionEdge) {
-        let notes = pinned ? model.pinnedNotes : model.unpinnedNotes
-        guard let targetIndex = edge.targetIndex(in: notes) else { return }
-        model.moveNote(note.id, inPinnedSection: pinned, toIndex: targetIndex)
     }
 
     private func toggleSidebar() {
@@ -453,12 +495,14 @@ struct MenuView: View {
         Group {
             Button("New note") { createNote() }
                 .keyboardShortcut("n", modifiers: .command)
-            Button("Delete note") { requestDeleteSelectedNote() }
+            Button("Delete selected notes") { requestDeleteSelectedNotes() }
                 .keyboardShortcut("d", modifiers: [.command, .shift])
-                .disabled(model.selectedNote == nil)
-            Button("Pin note") { model.togglePinSelected() }
+                .disabled(!hasSelectedNotes)
+            Button("Pin selected notes") { model.togglePinSelected() }
                 .keyboardShortcut("p", modifiers: [.command, .shift])
-                .disabled(model.selectedNote == nil)
+                .disabled(!hasSelectedNotes)
+            Button("Select all notes") { model.selectAllNotes() }
+                .keyboardShortcut("a", modifiers: [.command, .option])
             Button("Toggle sidebar") { toggleSidebar() }
                 .keyboardShortcut("e", modifiers: [.command, .shift])
             Button("Toggle Markdown preview") { togglePreviewMode() }
@@ -563,23 +607,10 @@ private struct Splitter: View {
     }
 }
 
-private enum SectionEdge {
-    case top
-    case bottom
-
-    func targetIndex(in notes: [Note]) -> Int? {
-        switch self {
-        case .top:
-            return notes.isEmpty ? nil : 0
-        case .bottom:
-            return notes.indices.last
-        }
-    }
-}
-
 private struct NoteRow: View {
     let note: Note
     let selected: Bool
+    let primary: Bool
 
     var body: some View {
         HStack(spacing: 8) {
@@ -608,9 +639,21 @@ private struct NoteRow: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Theme.innerCorner).fill(selected ? Theme.accent.opacity(0.18) : Color.black.opacity(0.18)))
-        .overlay(RoundedRectangle(cornerRadius: Theme.innerCorner).strokeBorder(selected ? Theme.accent.opacity(0.55) : Color.white.opacity(0.06), lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: Theme.innerCorner).fill(backgroundColor))
+        .overlay(RoundedRectangle(cornerRadius: Theme.innerCorner).strokeBorder(borderColor, lineWidth: 1))
         .contentShape(RoundedRectangle(cornerRadius: Theme.innerCorner))
+    }
+
+    private var backgroundColor: Color {
+        if primary { return Theme.accent.opacity(0.22) }
+        if selected { return Theme.accent.opacity(0.1) }
+        return Color.black.opacity(0.18)
+    }
+
+    private var borderColor: Color {
+        if primary { return Theme.accent.opacity(0.65) }
+        if selected { return Theme.accent.opacity(0.35) }
+        return Color.white.opacity(0.06)
     }
 }
 
