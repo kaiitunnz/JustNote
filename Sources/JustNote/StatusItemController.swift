@@ -14,7 +14,6 @@ final class StatusItemController: NSObject {
     private let popover: NSPopover
     private var globalMonitor: Any?
     private var localMonitor: Any?
-    private var syntheticClickMonitor: Any?
     private var shownAt: Date?
 
     init(model: AppModel) {
@@ -81,10 +80,18 @@ final class StatusItemController: NSObject {
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
             guard let self else { return event }
             let clickWindow = event.window
-            // A click on the status button routes here too; leave it to the button's own toggle so
-            // we don't close-then-reopen. Clicks inside the popover keep it open.
-            if clickWindow != self.statusItem.button?.window,
-               clickWindow != self.popover.contentViewController?.view.window {
+            if clickWindow == self.statusItem.button?.window {
+                // A click on the status button routes here too; leave it to the button's own toggle
+                // so we don't close-then-reopen — except a *synthesized* click, which macOS posts to
+                // the button when Space/Return is pressed inside the open panel (it hands the first
+                // keystroke to the menu-bar item), whose action would toggle the panel shut. Real
+                // clicks come from the HID system, so drop button clicks that aren't hardware-generated.
+                if let sourceState = event.cgEvent?.getIntegerValueField(.eventSourceStateID),
+                   sourceState != CGEventSourceStateID.hidSystemState.rawValue {
+                    return nil
+                }
+            } else if clickWindow != self.popover.contentViewController?.view.window {
+                // A click anywhere but inside the popover dismisses it.
                 self.popover.performClose(nil)
             }
             return event
@@ -96,21 +103,6 @@ final class StatusItemController: NSObject {
             name: NSApplication.didResignActiveNotification,
             object: nil
         )
-
-        // A key press inside the open panel that no control consumes — Space or Return, which macOS
-        // hands to the menu-bar item after opening — makes AppKit post a *synthesized* click to the
-        // status-item button, whose action toggles the panel shut on the keystroke. A real click
-        // comes from the HID system; the synthesized event has no hardware source, so drop button
-        // clicks that aren't hardware-generated while the panel is open. Genuine clicks (which
-        // dismiss the panel) and the global hotkey are unaffected.
-        syntheticClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
-            guard let self,
-                  event.window == self.statusItem.button?.window,
-                  let sourceState = event.cgEvent?.getIntegerValueField(.eventSourceStateID),
-                  sourceState != CGEventSourceStateID.hidSystemState.rawValue
-            else { return event }
-            return nil
-        }
     }
 
     /// Ignore the resign churn from summoning over a full-screen app: the menu-bar reveal is an
@@ -123,11 +115,9 @@ final class StatusItemController: NSObject {
     private func removeDismissHandlers() {
         if let globalMonitor { NSEvent.removeMonitor(globalMonitor) }
         if let localMonitor { NSEvent.removeMonitor(localMonitor) }
-        if let syntheticClickMonitor { NSEvent.removeMonitor(syntheticClickMonitor) }
         NotificationCenter.default.removeObserver(self, name: NSApplication.didResignActiveNotification, object: nil)
         globalMonitor = nil
         localMonitor = nil
-        syntheticClickMonitor = nil
     }
 }
 
