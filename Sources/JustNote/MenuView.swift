@@ -32,7 +32,7 @@ struct MenuView: View {
             Divider()
             footer
         }
-        .frame(width: Theme.panelWidth, height: Theme.panelHeight)
+        .frame(minWidth: Theme.minPanelWidth, maxWidth: .infinity, minHeight: Theme.minPanelHeight, maxHeight: .infinity)
         .background { keyboardShortcuts }
         .overlay(alignment: .center) { wrapIndicator }
         .tint(Theme.accent)

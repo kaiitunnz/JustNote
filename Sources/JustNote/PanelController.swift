@@ -1,24 +1,32 @@
 import AppKit
 import SwiftUI
 
-/// A borderless panel that can still become key so its hosted text view accepts input — the
-/// standard construction for a Spotlight/Alfred-style summon panel. A plain borderless window
-/// refuses key/main status, which would leave the editor unable to receive typing.
+/// A chromeless panel that always accepts key/main so its hosted text view receives input. The
+/// overrides matter for the borderless-adjacent configuration (a bare panel can refuse key status)
+/// and are harmless for the titled window used here.
 final class FloatingPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
 }
 
 /// Owns the summoned note panel: a free-floating `NSPanel` toggled by the global shortcut, shown
-/// centered over the active screen (including full-screen spaces), and dismissed on the shortcut,
-/// Escape, or losing key. Replaces the status-item popover, whose anchor to a menu-bar button was
-/// the source of the keyboard bugs on macOS 26/27; a standalone key window has no such anchor.
+/// over the active screen (including full-screen spaces), and dismissed on the shortcut, Escape, or
+/// losing key. It is user-movable and -resizable, and its frame persists across summons and app
+/// restarts. Replaces the status-item popover, whose anchor to a menu-bar button was the source of
+/// the keyboard bugs on macOS 26/27; a standalone key window has no such anchor.
 @MainActor
 final class PanelController: NSObject {
     private let panel: FloatingPanel
     private var escapeMonitor: Any?
     private var shownAt: Date?
     private var dismissSuspended = false
+    private var hasPositioned = false
+
+    /// True when a saved frame was restored at launch — first summon then keeps it instead of
+    /// re-centering.
+    private var restoredSavedFrame = false
+
+    private static let frameAutosaveName = NSWindow.FrameAutosaveName("JustNotePanelFrame")
 
     /// Grace period after showing during which a resign-key event is ignored: summoning over a
     /// full-screen space can churn key status before the panel settles, and self-dismissing then
@@ -28,7 +36,7 @@ final class PanelController: NSObject {
     init(model: AppModel) {
         panel = FloatingPanel(
             contentRect: NSRect(x: 0, y: 0, width: Theme.panelWidth, height: Theme.panelHeight),
-            styleMask: [.borderless],
+            styleMask: [.titled, .fullSizeContentView, .resizable],
             backing: .buffered,
             defer: false
         )
@@ -39,7 +47,12 @@ final class PanelController: NSObject {
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.hidesOnDeactivate = false
-        panel.isMovableByWindowBackground = false
+        panel.minSize = NSSize(width: Theme.minPanelWidth, height: Theme.minPanelHeight)
+        panel.titleVisibility = .hidden
+        panel.titlebarAppearsTransparent = true
+        panel.standardWindowButton(.closeButton)?.isHidden = true
+        panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        panel.standardWindowButton(.zoomButton)?.isHidden = true
         panel.isReleasedWhenClosed = false
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -66,6 +79,12 @@ final class PanelController: NSObject {
         ])
 
         panel.contentView = effectView
+
+        // Persist and restore the user's frame across launches. With an autosave name set, the
+        // panel writes its frame to UserDefaults on every move/resize automatically; `setFrameUsingName`
+        // restores it (false when nothing is saved yet).
+        panel.setFrameAutosaveName(Self.frameAutosaveName)
+        restoredSavedFrame = panel.setFrameUsingName(Self.frameAutosaveName)
     }
 
     /// Toggle entry point for the global shortcut: summon if hidden, dismiss if already up.
@@ -78,7 +97,7 @@ final class PanelController: NSObject {
     }
 
     private func show() {
-        positionOnActiveScreen()
+        positionForSummon()
         installEscapeMonitor()
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
@@ -98,6 +117,18 @@ final class PanelController: NSObject {
         return work()
     }
 
+    /// Decide where the panel appears on summon. The first summon centers Spotlight-style unless a
+    /// saved frame was restored at launch; later summons keep the frame the user left it at (the
+    /// panel isn't released between summons). Any summon whose frame is no longer on a screen — e.g.
+    /// a display was disconnected — recenters.
+    private func positionForSummon() {
+        if !hasPositioned {
+            hasPositioned = true
+            if !restoredSavedFrame { positionOnActiveScreen() }
+        }
+        if !frameIsVisible(panel.frame) { positionOnActiveScreen() }
+    }
+
     /// Center horizontally and sit in the upper third (Spotlight-like) of the screen under the
     /// pointer, falling back to the main screen.
     private func positionOnActiveScreen() {
@@ -112,6 +143,17 @@ final class PanelController: NSObject {
         let x = visible.midX - size.width / 2
         let y = visible.minY + visible.height * 0.62 - size.height / 2
         panel.setFrameOrigin(NSPoint(x: x, y: y))
+    }
+
+    /// A frame is usable if most of it lands on a single screen's visible area — mere edge contact
+    /// (e.g. a frame saved on a now-disconnected larger display) recenters instead.
+    private func frameIsVisible(_ frame: NSRect) -> Bool {
+        let area = frame.width * frame.height
+        guard area > 0 else { return false }
+        return NSScreen.screens.contains { screen in
+            let overlap = screen.visibleFrame.intersection(frame)
+            return (overlap.width * overlap.height) >= area * 0.6
+        }
     }
 
     /// Escape must dismiss even while the note editor is first responder, where `cancelOperation`
@@ -157,5 +199,11 @@ extension PanelController: NSWindowDelegate {
     /// Single teardown point for the key monitor, robust to every close path.
     func windowWillClose(_ notification: Notification) {
         removeEscapeMonitor()
+    }
+
+    /// `.resizable` makes the panel zoomable, so a double-click on the transparent titlebar (which
+    /// overlaps the header) would balloon it to fill the screen and persist that frame. Suppress it.
+    func windowShouldZoom(_ window: NSWindow, toFrame newFrame: NSRect) -> Bool {
+        false
     }
 }

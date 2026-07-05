@@ -8,6 +8,8 @@ enum Theme {
 
     static let panelWidth: CGFloat = 660
     static let panelHeight: CGFloat = 480
+    static let minPanelWidth: CGFloat = 480
+    static let minPanelHeight: CGFloat = 360
     static let sidebarWidth: CGFloat = 218
     static let minSidebarWidth: CGFloat = 170
     static let maxSidebarWidth: CGFloat = 340
