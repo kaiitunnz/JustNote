@@ -326,16 +326,11 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func revealNoteInFinder(_ noteID: UUID) {
-        revealNotesInFinder([noteID])
-    }
-
     func revealNotesInFinder(_ noteIDs: Set<UUID>) {
         let noteURLs = notesInDisplayOrder(for: noteIDs).map { store.noteBodyURL(for: $0) }
         guard !noteURLs.isEmpty else { return }
-        let missingURL = noteURLs.first { !FileManager.default.fileExists(atPath: $0.path) }
-        guard missingURL == nil else {
-            lastError = "Reveal note failed: \(missingURL!.lastPathComponent) does not exist"
+        if let missingURL = noteURLs.first(where: { !FileManager.default.fileExists(atPath: $0.path) }) {
+            lastError = "Reveal note failed: \(missingURL.lastPathComponent) does not exist"
             return
         }
         NSWorkspace.shared.activateFileViewerSelecting(noteURLs)
