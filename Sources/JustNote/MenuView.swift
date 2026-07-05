@@ -54,8 +54,6 @@ struct MenuView: View {
                     .padding(7)
             }
             .frame(width: 34, height: 34)
-            .contentShape(Rectangle())
-            .onTapGesture { model.collapseSelectionToPrimary() }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("JustNote")
@@ -65,13 +63,8 @@ struct MenuView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-            .contentShape(Rectangle())
-            .onTapGesture { model.collapseSelectionToPrimary() }
 
-            Color.clear
-                .frame(maxWidth: .infinity, maxHeight: 34)
-                .contentShape(Rectangle())
-                .onTapGesture { model.collapseSelectionToPrimary() }
+            Spacer()
 
             if let error = model.lastError {
                 Text(error)
@@ -79,8 +72,6 @@ struct MenuView: View {
                     .foregroundStyle(Theme.error)
                     .lineLimit(1)
                     .frame(maxWidth: 220, alignment: .trailing)
-                    .contentShape(Rectangle())
-                    .onTapGesture { model.collapseSelectionToPrimary() }
             }
 
             Button(action: createNote) {
@@ -109,6 +100,8 @@ struct MenuView: View {
             .disabled(!hasSelectedNotes)
         }
         .padding(14)
+        .contentShape(Rectangle())
+        .onTapGesture { model.collapseSelectionToPrimary() }
     }
 
     private var sidebar: some View {
@@ -304,20 +297,13 @@ struct MenuView: View {
                     Image(systemName: note.pinned ? "pin.fill" : "doc.text")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(note.pinned ? Theme.pinned : Theme.accent)
-                        .contentShape(Rectangle())
-                        .onTapGesture { model.collapseSelectionToPrimary() }
                     VStack(alignment: .leading, spacing: 1) {
                         Text(note.title)
                             .font(Theme.rounded(13, weight: .semibold))
                             .lineLimit(1)
                         TimestampText(date: note.updatedAt)
                     }
-                    .contentShape(Rectangle())
-                    .onTapGesture { model.collapseSelectionToPrimary() }
-                    Color.clear
-                        .frame(maxWidth: .infinity, maxHeight: 32)
-                        .contentShape(Rectangle())
-                        .onTapGesture { model.collapseSelectionToPrimary() }
+                    Spacer()
                     if !isPreviewing {
                         Button {
                             wrapLines.toggle()
@@ -337,6 +323,8 @@ struct MenuView: View {
                     .buttonStyle(HeaderIconButtonStyle())
                     .help(isPreviewing ? "Edit note" : "Preview markdown")
                 }
+                .contentShape(Rectangle())
+                .onTapGesture { model.collapseSelectionToPrimary() }
 
                 Group {
                     if isPreviewing {
@@ -421,7 +409,8 @@ struct MenuView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .simultaneousGesture(TapGesture().onEnded { model.collapseSelectionToPrimary() })
+        .contentShape(Rectangle())
+        .onTapGesture { model.collapseSelectionToPrimary() }
     }
 
     private func createNote() {
