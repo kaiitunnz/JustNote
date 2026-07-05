@@ -86,7 +86,7 @@ final class AppModel: ObservableObject {
         guard notes.contains(where: { $0.id == noteID }) else { return }
         notes.removeAll { $0.id == noteID }
         noteOrderIDs.removeAll { $0 == noteID }
-        if selectedNoteID.map({ selectedID in notes.contains { $0.id == selectedID } }) != true {
+        if selectedNoteID == nil || !notes.contains(where: { $0.id == selectedNoteID }) {
             selectedNoteID = orderedNotes.first?.id
         }
         save()
