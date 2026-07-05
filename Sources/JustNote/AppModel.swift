@@ -178,6 +178,12 @@ final class AppModel: ObservableObject {
         save()
     }
 
+    func collapseSelectionToPrimary() {
+        guard let selectedNoteID, selectedNoteIDs != [selectedNoteID] else { return }
+        setPrimarySelection(selectedNoteID, selectedIDs: [selectedNoteID], anchorID: selectedNoteID)
+        save()
+    }
+
     func selectAllNotes() {
         let orderedIDs = orderedNotes.map(\.id)
         guard !orderedIDs.isEmpty else {

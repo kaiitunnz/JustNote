@@ -115,6 +115,7 @@ struct MenuView: View {
         }
         .padding(12)
         .contentShape(Rectangle())
+        .onTapGesture { model.collapseSelectionToPrimary() }
         .contextMenu {
             sidebarContextMenu
         }
@@ -329,9 +330,13 @@ struct MenuView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     } else {
-                        PlainTextEditor(text: model.bodyBinding(), wrapsLines: wrapLines)
-                            .contentShape(Rectangle())
-                            .onTapGesture { }
+                        PlainTextEditor(
+                            text: model.bodyBinding(),
+                            wrapsLines: wrapLines,
+                            onBeginEditing: { model.collapseSelectionToPrimary() }
+                        )
+                        .contentShape(Rectangle())
+                        .onTapGesture { }
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -350,7 +355,10 @@ struct MenuView: View {
         .padding(14)
         .background {
             if !isPreviewing {
-                Color.clear.contentShape(Rectangle()).onTapGesture { resignTextFocus() }
+                Color.clear.contentShape(Rectangle()).onTapGesture {
+                    model.collapseSelectionToPrimary()
+                    resignTextFocus()
+                }
             }
         }
     }

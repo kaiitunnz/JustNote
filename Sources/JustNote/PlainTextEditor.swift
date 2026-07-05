@@ -4,6 +4,7 @@ import SwiftUI
 struct PlainTextEditor: NSViewRepresentable {
     @Binding var text: String
     let wrapsLines: Bool
+    var onBeginEditing: (() -> Void)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(text: $text)
@@ -18,6 +19,7 @@ struct PlainTextEditor: NSViewRepresentable {
 
         let textView = EndAnchoredTextView(frame: .zero)
         textView.delegate = context.coordinator
+        textView.onBeginEditing = onBeginEditing
         textView.string = text
         textView.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
         textView.textColor = .labelColor
@@ -38,7 +40,8 @@ struct PlainTextEditor: NSViewRepresentable {
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        guard let textView = scrollView.documentView as? NSTextView else { return }
+        guard let textView = scrollView.documentView as? EndAnchoredTextView else { return }
+        textView.onBeginEditing = onBeginEditing
         context.coordinator.text = $text
         if textView.string != text {
             let selectedRanges = textView.selectedRanges
@@ -105,6 +108,13 @@ struct PlainTextEditor: NSViewRepresentable {
 // Clicking the empty area below the text jumps straight to the end of the text, without the
 // intermediate caret placement NSTextView would otherwise show there (which reads as a flicker).
 final class EndAnchoredTextView: NSTextView {
+    var onBeginEditing: (() -> Void)?
+
+    override func becomeFirstResponder() -> Bool {
+        onBeginEditing?()
+        return super.becomeFirstResponder()
+    }
+
     override func mouseDown(with event: NSEvent) {
         guard let layoutManager, let textContainer else {
             super.mouseDown(with: event)

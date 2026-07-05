@@ -126,6 +126,37 @@ final class JustNoteTests: XCTestCase {
         XCTAssertEqual(model.selectedNoteIDs, Set(order))
     }
 
+    func testCollapseSelectionToPrimaryDropsExtraSelection() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        model.createNote()
+        model.createNote()
+        let order = model.orderedNotes.map(\.id)
+
+        model.selectOnly(order[0])
+        model.toggleSelection(order[1])
+        model.toggleSelection(order[2])
+        XCTAssertEqual(model.selectedNoteID, order[2])
+        XCTAssertEqual(model.selectedNoteIDs, Set(order))
+
+        model.collapseSelectionToPrimary()
+        XCTAssertEqual(model.selectedNoteID, order[2])
+        XCTAssertEqual(model.selectedNoteIDs, [order[2]])
+
+        // A subsequent range selection anchors at the collapsed primary.
+        model.selectRange(to: order[0])
+        XCTAssertEqual(model.selectedNoteIDs, Set(order))
+    }
+
+    func testCollapseSelectionToPrimaryIsNoOpWhenSingle() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        let id = try XCTUnwrap(model.selectedNoteID)
+        XCTAssertEqual(model.selectedNoteIDs, [id])
+
+        model.collapseSelectionToPrimary()
+        XCTAssertEqual(model.selectedNoteID, id)
+        XCTAssertEqual(model.selectedNoteIDs, [id])
+    }
+
     func testSelectAdjacentNoteIsNoOpWithSingleNote() throws {
         let model = AppModel(store: try NoteStore(rootURL: rootURL))
         XCTAssertEqual(model.orderedNotes.count, 1)
