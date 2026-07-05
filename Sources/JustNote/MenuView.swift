@@ -193,24 +193,24 @@ struct MenuView: View {
             Button {
                 model.setPinned(targetIDs, pinned: false)
             } label: {
-                Label(count == 1 ? "Unpin Note" : "Unpin Selected Notes", systemImage: "pin.slash")
+                Label(count == 1 ? "Unpin Note" : "Unpin Selected", systemImage: "pin.slash")
             }
         } else if allUnpinned {
             Button {
                 model.setPinned(targetIDs, pinned: true)
             } label: {
-                Label(count == 1 ? "Pin Note" : "Pin Selected Notes", systemImage: "pin")
+                Label(count == 1 ? "Pin Note" : "Pin Selected", systemImage: "pin")
             }
         } else {
             Button {
                 model.setPinned(targetIDs, pinned: true)
             } label: {
-                Label("Pin Selected Notes", systemImage: "pin")
+                Label("Pin Selected", systemImage: "pin")
             }
             Button {
                 model.setPinned(targetIDs, pinned: false)
             } label: {
-                Label("Unpin Selected Notes", systemImage: "pin.slash")
+                Label("Unpin Selected", systemImage: "pin.slash")
             }
         }
 
@@ -219,28 +219,28 @@ struct MenuView: View {
         Button {
             model.moveNotes(targetIDs, inPinnedSection: pinned, toEdge: .top)
         } label: {
-            Label(count == 1 ? "Move to Top" : "Move Selected to Top", systemImage: "arrow.up.to.line")
+            Label("Move to Top", systemImage: "arrow.up.to.line")
         }
         .disabled(!model.canMoveNotesToEdge(targetIDs, inPinnedSection: pinned, edge: .top))
 
         Button {
             model.moveNotes(targetIDs, inPinnedSection: pinned, direction: -1)
         } label: {
-            Label(count == 1 ? "Move Up" : "Move Selected Up", systemImage: "arrow.up")
+            Label("Move Up", systemImage: "arrow.up")
         }
         .disabled(!model.canMoveNotes(targetIDs, inPinnedSection: pinned, direction: -1))
 
         Button {
             model.moveNotes(targetIDs, inPinnedSection: pinned, direction: 1)
         } label: {
-            Label(count == 1 ? "Move Down" : "Move Selected Down", systemImage: "arrow.down")
+            Label("Move Down", systemImage: "arrow.down")
         }
         .disabled(!model.canMoveNotes(targetIDs, inPinnedSection: pinned, direction: 1))
 
         Button {
             model.moveNotes(targetIDs, inPinnedSection: pinned, toEdge: .bottom)
         } label: {
-            Label(count == 1 ? "Move to Bottom" : "Move Selected to Bottom", systemImage: "arrow.down.to.line")
+            Label("Move to Bottom", systemImage: "arrow.down.to.line")
         }
         .disabled(!model.canMoveNotesToEdge(targetIDs, inPinnedSection: pinned, edge: .bottom))
 
@@ -249,25 +249,25 @@ struct MenuView: View {
         Button {
             model.duplicateNotes(targetIDs)
         } label: {
-            Label(count == 1 ? "Duplicate Note" : "Duplicate Selected Notes", systemImage: "plus.square.on.square")
+            Label(count == 1 ? "Duplicate Note" : "Duplicate Selected", systemImage: "plus.square.on.square")
         }
 
         Button {
             model.revealNotesInFinder(targetIDs)
         } label: {
-            Label(count == 1 ? "Reveal in Finder" : "Reveal Selected in Finder", systemImage: "folder")
+            Label(count == 1 ? "Reveal in Finder" : "Reveal Selected", systemImage: "folder")
         }
 
         Button {
             copyTitles(targetIDs)
         } label: {
-            Label(count == 1 ? "Copy Title" : "Copy Selected Titles", systemImage: "doc.on.doc")
+            Label(count == 1 ? "Copy Title" : "Copy Titles", systemImage: "doc.on.doc")
         }
 
         Button {
             copyContents(targetIDs)
         } label: {
-            Label(count == 1 ? "Copy Note Contents" : "Copy Selected Note Contents", systemImage: "doc.text")
+            Label(count == 1 ? "Copy Note Contents" : "Copy Contents", systemImage: "doc.text")
         }
 
         Divider()
@@ -275,7 +275,7 @@ struct MenuView: View {
         Button(role: .destructive) {
             requestDeleteNotes(targetIDs)
         } label: {
-            Label(count == 1 ? "Delete Note..." : "Delete Selected Notes...", systemImage: "trash")
+            Label(count == 1 ? "Delete Note..." : "Delete Selected...", systemImage: "trash")
         }
     }
 
