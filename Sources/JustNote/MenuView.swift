@@ -333,11 +333,13 @@ struct MenuView: View {
                                 .padding(12)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
+                        .contentShape(Rectangle())
+                        .simultaneousGesture(TapGesture().onEnded { model.collapseSelectionToPrimary() })
                     } else {
                         PlainTextEditor(
                             text: model.bodyBinding(),
                             wrapsLines: wrapLines,
-                            onBeginEditing: { model.collapseSelectionToPrimary() }
+                            onInteract: { model.collapseSelectionToPrimary() }
                         )
                         .contentShape(Rectangle())
                         .onTapGesture { }
@@ -358,11 +360,9 @@ struct MenuView: View {
         }
         .padding(14)
         .background {
-            if !isPreviewing {
-                Color.clear.contentShape(Rectangle()).onTapGesture {
-                    model.collapseSelectionToPrimary()
-                    resignTextFocus()
-                }
+            Color.clear.contentShape(Rectangle()).onTapGesture {
+                model.collapseSelectionToPrimary()
+                if !isPreviewing { resignTextFocus() }
             }
         }
     }
