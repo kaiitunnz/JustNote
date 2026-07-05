@@ -69,6 +69,7 @@ final class PanelController: NSObject {
         effectView.layer?.masksToBounds = true
 
         let hostingView = NSHostingView(rootView: MenuView(model: model))
+        hostingView.safeAreaRegions = []
         hostingView.translatesAutoresizingMaskIntoConstraints = false
         effectView.addSubview(hostingView)
         NSLayoutConstraint.activate([
