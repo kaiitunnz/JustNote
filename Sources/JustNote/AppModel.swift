@@ -93,10 +93,6 @@ final class AppModel: ObservableObject {
         duplicateNotes([noteID])
     }
 
-    func duplicateSelectedNotes() {
-        duplicateNotes(activeSelectionIDs)
-    }
-
     func duplicateNotes(_ noteIDs: Set<UUID>) {
         let originals = notesInDisplayOrder(for: noteIDs)
         guard !originals.isEmpty else { return }
@@ -260,14 +256,6 @@ final class AppModel: ObservableObject {
         moveNotes([noteID], inPinnedSection: false, direction: direction)
     }
 
-    func canMovePinnedNote(_ noteID: UUID, direction: Int) -> Bool {
-        canMove(noteID, in: pinnedNotes, direction: direction)
-    }
-
-    func canMoveUnpinnedNote(_ noteID: UUID, direction: Int) -> Bool {
-        canMove(noteID, in: unpinnedNotes, direction: direction)
-    }
-
     func moveNote(_ noteID: UUID, inPinnedSection pinned: Bool, toIndex requestedIndex: Int) {
         moveNotes([noteID], inPinnedSection: pinned, toIndex: requestedIndex)
     }
@@ -340,10 +328,6 @@ final class AppModel: ObservableObject {
 
     func revealNoteInFinder(_ noteID: UUID) {
         revealNotesInFinder([noteID])
-    }
-
-    func revealSelectedNotesInFinder() {
-        revealNotesInFinder(activeSelectionIDs)
     }
 
     func revealNotesInFinder(_ noteIDs: Set<UUID>) {
@@ -421,11 +405,6 @@ final class AppModel: ObservableObject {
         } else {
             noteOrderIDs = currentPinnedIDs + targetIDs + currentUnpinnedIDs
         }
-    }
-
-    private func canMove(_ noteID: UUID, in section: [Note], direction: Int) -> Bool {
-        guard let index = section.firstIndex(where: { $0.id == noteID }) else { return false }
-        return section.indices.contains(index + direction)
     }
 
     private func contiguousRange(for noteIDs: Set<UUID>, in section: [Note]) -> ClosedRange<Int>? {
