@@ -307,6 +307,28 @@ final class JustNoteTests: XCTestCase {
         XCTAssertEqual(model.selectedNoteIDs, [order[3]])
     }
 
+    func testDeletingNonPrimaryFromGroupKeepsPrimaryAndRemainingSelection() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        model.updateSelectedBody("First")
+        model.createNote()
+        model.updateSelectedBody("Second")
+        model.createNote()
+        model.updateSelectedBody("Third")
+        let order = model.orderedNotes.map(\.id)
+
+        model.selectOnly(order[0])
+        model.toggleSelection(order[1])
+        model.toggleSelection(order[2])
+        XCTAssertEqual(model.selectedNoteID, order[2])
+        XCTAssertEqual(model.selectedNoteIDs, Set(order))
+
+        model.deleteNotes([order[0]])
+
+        XCTAssertEqual(model.orderedNotes.map(\.id), [order[1], order[2]])
+        XCTAssertEqual(model.selectedNoteID, order[2])
+        XCTAssertEqual(model.selectedNoteIDs, [order[1], order[2]])
+    }
+
     func testDeletingSelectedNoteLeavesValidSelectionOrEmptyState() throws {
         let model = AppModel(store: try NoteStore(rootURL: rootURL))
         let firstID = try XCTUnwrap(model.selectedNoteID)
