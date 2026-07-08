@@ -20,7 +20,7 @@ Targets **macOS 27+**, Swift 5.
 ```sh
 xcodegen generate          # after adding/removing files (sources are globbed by directory)
 xcodebuild -project JustNote.xcodeproj -scheme JustNote -configuration Debug -derivedDataPath build build
-xcodebuild test  -project JustNote.xcodeproj -scheme JustNote -configuration Debug -derivedDataPath build -destination 'platform=macOS'
+xcodebuild test -project JustNote.xcodeproj -scheme JustNote -configuration Debug -derivedDataPath build -destination 'platform=macOS'
 ```
 
 The XCTest suite is **model-only** (injects a temp store) — it covers `NoteStore`/`AppModel`, not

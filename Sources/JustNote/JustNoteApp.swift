@@ -87,7 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow?.makeKeyAndOrderFront(nil)
     }
 
-    /// Return to menu-bar-only once the Settings window closes. `willCloseNotification` fires
+    /// Return to accessory-only (background) once the Settings window closes. `willCloseNotification` fires
     /// before the window leaves `NSApp.windows`, so defer the count until it has.
     @objc private func windowWillClose(_ notification: Notification) {
         DispatchQueue.main.async {

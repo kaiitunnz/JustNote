@@ -1,11 +1,11 @@
 # JustNote
 
-A macOS menu-bar app for plain-text notes. It stays in the menu bar, opens as a compact Liquid Glass panel, and autosaves every edit.
+A macOS accessory app for plain-text notes. It runs in the background, opens as a floating panel via a global shortcut (⌥.), and autosaves every edit. Requires macOS 27+.
 
 ## What it does
 
 - Creates and deletes plain-text notes.
-- Navigates all notes from the menu-bar panel.
+- Navigates all notes from the floating panel.
 - Autosaves edits to `.txt` files.
 - Persists selected note, pinned notes, and recently opened notes.
 - Keeps pinned and unpinned notes in separate drag-movable sections.
@@ -32,7 +32,7 @@ Requires Xcode and [XcodeGen](https://github.com/yonyz/XcodeGen) (`brew install 
 
 ```sh
 xcodegen generate
-xcodebuild -project JustNote.xcodeproj -scheme JustNote -configuration Debug build
+xcodebuild -project JustNote.xcodeproj -scheme JustNote -configuration Debug -derivedDataPath build build
 ```
 
 `project.yml` is the source of truth; `JustNote.xcodeproj` is generated and git-ignored. Debug builds are unsigned for day-to-day local development.
