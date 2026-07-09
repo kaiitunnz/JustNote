@@ -2,12 +2,26 @@ import KeyboardShortcuts
 import SwiftUI
 
 struct SettingsView: View {
+    @AppStorage(PanelSummonScreenMode.defaultsKey) private var summonScreenMode = PanelSummonScreenMode.last.rawValue
+
     var body: some View {
         Form {
             Section {
                 KeyboardShortcuts.Recorder("Toggle JustNote:", name: .togglePanel)
             } footer: {
                 Text("Press this shortcut from any app to show or hide the note panel.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                Picker("Summon placement:", selection: $summonScreenMode) {
+                    ForEach(PanelSummonScreenMode.allCases) { mode in
+                        Text(mode.title).tag(mode.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+            } footer: {
+                Text("Last keeps the saved frame. Mouse and Focused keep the panel's relative placement on the screen under the pointer or the currently focused screen.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }

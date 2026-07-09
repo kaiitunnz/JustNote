@@ -1,4 +1,5 @@
 import XCTest
+import AppKit
 @testable import JustNote
 
 @MainActor
@@ -432,5 +433,35 @@ final class JustNoteTests: XCTestCase {
             store.noteBodyURL(for: note),
             rootURL.appendingPathComponent("Notes").appendingPathComponent("\(note.id.uuidString).txt")
         )
+    }
+
+    func testPanelSummonPlacementReprojectsFrameByVisibleFrameRatios() throws {
+        let frame = NSRect(x: 100, y: 200, width: 500, height: 400)
+        let source = NSRect(x: 0, y: 0, width: 1_000, height: 800)
+        let target = NSRect(x: 2_000, y: 100, width: 2_000, height: 1_200)
+
+        let reprojected = try XCTUnwrap(PanelSummonPlacement.reproject(
+            frame: frame,
+            from: source,
+            to: target,
+            minSize: NSSize(width: 200, height: 150)
+        ))
+
+        XCTAssertEqual(reprojected, NSRect(x: 2_200, y: 400, width: 500, height: 400))
+    }
+
+    func testPanelSummonPlacementClampsFrameIntoTargetVisibleFrame() throws {
+        let frame = NSRect(x: 800, y: 650, width: 400, height: 200)
+        let source = NSRect(x: 0, y: 0, width: 1_000, height: 800)
+        let target = NSRect(x: 0, y: 0, width: 600, height: 400)
+
+        let reprojected = try XCTUnwrap(PanelSummonPlacement.reproject(
+            frame: frame,
+            from: source,
+            to: target,
+            minSize: NSSize(width: 200, height: 100)
+        ))
+
+        XCTAssertEqual(reprojected, NSRect(x: 200, y: 200, width: 400, height: 200))
     }
 }
