@@ -1,6 +1,47 @@
 import AppKit
 import SwiftUI
 
+enum PanelSummonScreenMode: String, CaseIterable, Identifiable {
+    case last
+    case mouse
+    case focused
+
+    static let defaultsKey = "panelSummonScreenMode"
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .last:
+            return "Last position"
+        case .mouse:
+            return "Mouse screen"
+        case .focused:
+            return "Focused screen"
+        }
+    }
+}
+
+struct PanelSummonPlacement {
+    static func reproject(frame: NSRect, from sourceVisible: NSRect, to targetVisible: NSRect, minSize: NSSize) -> NSRect? {
+        guard frame.width > 0, frame.height > 0 else { return nil }
+        guard sourceVisible.width > 0, sourceVisible.height > 0 else { return nil }
+        guard targetVisible.width > 0, targetVisible.height > 0 else { return nil }
+
+        let width = min(max(minSize.width, frame.width), targetVisible.width)
+        let height = min(max(minSize.height, frame.height), targetVisible.height)
+        let x = targetVisible.minX + (frame.minX - sourceVisible.minX) / sourceVisible.width * targetVisible.width
+        let y = targetVisible.minY + (frame.minY - sourceVisible.minY) / sourceVisible.height * targetVisible.height
+
+        return NSRect(
+            x: min(max(x, targetVisible.minX), targetVisible.maxX - width),
+            y: min(max(y, targetVisible.minY), targetVisible.maxY - height),
+            width: width,
+            height: height
+        )
+    }
+}
+
 /// A chromeless panel that always accepts key/main so its hosted text view receives input. The
 /// overrides matter for the borderless-adjacent configuration (a bare panel can refuse key status)
 /// and are harmless for the titled window used here.
@@ -10,10 +51,11 @@ final class FloatingPanel: NSPanel {
 }
 
 /// Owns the summoned note panel: a free-floating `NSPanel` toggled by the global shortcut, shown
-/// over the active screen (including full-screen spaces), and dismissed on the shortcut, Escape, or
-/// losing key. It is user-movable and -resizable, and its frame persists across summons and app
-/// restarts. Replaces the status-item popover, whose anchor to a menu-bar button was the source of
-/// the keyboard bugs on macOS 26/27; a standalone key window has no such anchor.
+/// over a user-selected target screen (including full-screen spaces), and dismissed on the
+/// shortcut, Escape, or losing key. It is user-movable and -resizable, and its frame persists
+/// across summons and app restarts. Replaces the status-item popover, whose anchor to a menu-bar
+/// button was the source of the keyboard bugs on macOS 26/27; a standalone key window has no such
+/// anchor.
 @MainActor
 final class PanelController: NSObject {
     private let panel: FloatingPanel
@@ -98,7 +140,8 @@ final class PanelController: NSObject {
     }
 
     private func show() {
-        positionForSummon()
+        let focusedScreen = NSScreen.main
+        positionForSummon(focusedScreen: focusedScreen)
         installEscapeMonitor()
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
@@ -118,32 +161,46 @@ final class PanelController: NSObject {
         return work()
     }
 
-    /// Decide where the panel appears on summon. The first summon centers Spotlight-style unless a
-    /// saved frame was restored at launch; later summons keep the frame the user left it at (the
-    /// panel isn't released between summons). Any summon whose frame is no longer on a screen — e.g.
-    /// a display was disconnected — recenters.
-    private func positionForSummon() {
-        if !hasPositioned {
-            hasPositioned = true
-            if !restoredSavedFrame { positionOnActiveScreen() }
+    /// Decide where the panel appears on summon. `last` keeps today's absolute saved-frame behavior;
+    /// `mouse` and `focused` reproject the current frame's size and placement ratios onto the target
+    /// screen's visible frame, falling back to the Spotlight-style default when that geometry is no
+    /// longer usable.
+    private func positionForSummon(focusedScreen: NSScreen?) {
+        let isFirstSummon = !hasPositioned
+        hasPositioned = true
+
+        let mouseScreen = screenContainingMouse()
+        switch summonScreenMode {
+        case .last:
+            positionForLastSummon(isFirstSummon: isFirstSummon, fallbackScreen: mouseScreen ?? focusedScreen)
+        case .mouse:
+            positionRelativeToTargetScreen(
+                mouseScreen ?? focusedScreen,
+                hasUsefulCurrentFrame: !isFirstSummon || restoredSavedFrame
+            )
+        case .focused:
+            positionRelativeToTargetScreen(
+                focusedScreen ?? mouseScreen,
+                hasUsefulCurrentFrame: !isFirstSummon || restoredSavedFrame
+            )
         }
-        if !frameIsVisible(panel.frame) { positionOnActiveScreen() }
     }
 
     /// Center horizontally and sit in the upper third (Spotlight-like) of the screen under the
-    /// pointer, falling back to the main screen.
-    private func positionOnActiveScreen() {
-        let mouse = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
-            ?? NSScreen.main
+    /// pointer, falling back to the supplied screen or the main screen.
+    private func positionDefault(on screen: NSScreen?) {
+        let screen = screen ?? screenContainingMouse() ?? NSScreen.main
         guard let visible = screen?.visibleFrame else {
             panel.center()
             return
         }
-        let size = panel.frame.size
+        let size = NSSize(
+            width: min(panel.frame.width, visible.width),
+            height: min(panel.frame.height, visible.height)
+        )
         let x = visible.midX - size.width / 2
         let y = visible.minY + visible.height * 0.62 - size.height / 2
-        panel.setFrameOrigin(NSPoint(x: x, y: y))
+        panel.setFrame(NSRect(origin: NSPoint(x: x, y: y), size: size), display: false)
     }
 
     /// A frame is usable if most of it lands on a single screen's visible area — mere edge contact
@@ -155,6 +212,60 @@ final class PanelController: NSObject {
             let overlap = screen.visibleFrame.intersection(frame)
             return (overlap.width * overlap.height) >= area * 0.6
         }
+    }
+
+    private var summonScreenMode: PanelSummonScreenMode {
+        PanelSummonScreenMode(rawValue: UserDefaults.standard.string(forKey: PanelSummonScreenMode.defaultsKey) ?? "")
+            ?? .last
+    }
+
+    private func positionForLastSummon(isFirstSummon: Bool, fallbackScreen: NSScreen?) {
+        if isFirstSummon, !restoredSavedFrame {
+            positionDefault(on: fallbackScreen)
+        }
+        if !frameIsVisible(panel.frame) {
+            positionDefault(on: fallbackScreen)
+        }
+    }
+
+    private func positionRelativeToTargetScreen(_ targetScreen: NSScreen?, hasUsefulCurrentFrame: Bool) {
+        guard let targetScreen else {
+            positionDefault(on: nil)
+            return
+        }
+        guard hasUsefulCurrentFrame else {
+            positionDefault(on: targetScreen)
+            return
+        }
+        guard
+            let sourceScreen = screenContainingLargestVisibleArea(of: panel.frame),
+            let reprojected = PanelSummonPlacement.reproject(
+                frame: panel.frame,
+                from: sourceScreen.visibleFrame,
+                to: targetScreen.visibleFrame,
+                minSize: panel.minSize
+            )
+        else {
+            positionDefault(on: targetScreen)
+            return
+        }
+        panel.setFrame(reprojected, display: false)
+    }
+
+    private func screenContainingMouse() -> NSScreen? {
+        let mouse = NSEvent.mouseLocation
+        return NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
+    }
+
+    private func screenContainingLargestVisibleArea(of frame: NSRect) -> NSScreen? {
+        let match = NSScreen.screens
+            .map { screen in
+                let overlap = screen.visibleFrame.intersection(frame)
+                return (screen, overlap.width * overlap.height)
+            }
+            .max { $0.1 < $1.1 }
+        guard let match, match.1 > 0 else { return nil }
+        return match.0
     }
 
     /// Escape must dismiss even while the note editor is first responder, where `cancelOperation`

@@ -2,12 +2,32 @@ import KeyboardShortcuts
 import SwiftUI
 
 struct SettingsView: View {
+    @AppStorage(PanelSummonScreenMode.defaultsKey) private var summonScreenMode = PanelSummonScreenMode.last.rawValue
+
     var body: some View {
         Form {
             Section {
                 KeyboardShortcuts.Recorder("Toggle JustNote:", name: .togglePanel)
             } footer: {
                 Text("Press this shortcut from any app to show or hide the note panel.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                HStack {
+                    Text("Open panel:")
+                    Spacer()
+                    Picker("Open panel", selection: $summonScreenMode) {
+                        ForEach(PanelSummonScreenMode.allCases) { mode in
+                            Text(mode.title).tag(mode.rawValue)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(width: 180, alignment: .trailing)
+                }
+            } footer: {
+                Text("Choose where the shortcut opens the panel.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
