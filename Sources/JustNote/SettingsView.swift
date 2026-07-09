@@ -24,7 +24,7 @@ struct SettingsView: View {
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
-                    .frame(width: 180)
+                    .frame(width: 180, alignment: .trailing)
                 }
             } footer: {
                 Text("Choose where the shortcut opens the panel.")
