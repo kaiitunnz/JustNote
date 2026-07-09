@@ -13,11 +13,11 @@ enum PanelSummonScreenMode: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .last:
-            return "Last Position"
+            return "Last position"
         case .mouse:
-            return "Mouse Screen"
+            return "Mouse screen"
         case .focused:
-            return "Focused Screen"
+            return "Focused screen"
         }
     }
 }

@@ -14,14 +14,20 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
             Section {
-                Picker("Summon placement:", selection: $summonScreenMode) {
-                    ForEach(PanelSummonScreenMode.allCases) { mode in
-                        Text(mode.title).tag(mode.rawValue)
+                HStack {
+                    Text("Open panel:")
+                    Spacer()
+                    Picker("Open panel", selection: $summonScreenMode) {
+                        ForEach(PanelSummonScreenMode.allCases) { mode in
+                            Text(mode.title).tag(mode.rawValue)
+                        }
                     }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(width: 180)
                 }
-                .pickerStyle(.segmented)
             } footer: {
-                Text("Last keeps the saved frame. Mouse and Focused keep the panel's relative placement on the screen under the pointer or the currently focused screen.")
+                Text("Choose where the shortcut opens the panel.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
