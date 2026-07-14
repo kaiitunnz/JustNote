@@ -327,6 +327,7 @@ struct MenuView: View {
                     if isPreviewing {
                         ScrollView {
                             MarkdownText(note.body)
+                                .markdownCodeBlockStyle(NormalizedCodeBlockStyle())
                                 .padding(12)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }

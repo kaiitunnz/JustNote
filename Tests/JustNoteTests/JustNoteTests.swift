@@ -51,6 +51,12 @@ final class JustNoteTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: bodyURL, encoding: .utf8), "Pasted note\nfrom clipboard")
     }
 
+    func testNormalizedCodeBlockContentRemovesOnlyOneTrailingNewline() {
+        XCTAssertEqual(normalizedCodeBlockContent("let value = 1"), "let value = 1")
+        XCTAssertEqual(normalizedCodeBlockContent("let value = 1\n"), "let value = 1")
+        XCTAssertEqual(normalizedCodeBlockContent("alpha  \n\n"), "alpha  \n")
+    }
+
     func testTitleStripsLeadingMarkdownHeader() {
         XCTAssertEqual(Note.title(from: "# My Note"), "My Note")
         XCTAssertEqual(Note.title(from: "###  Spaced"), "Spaced")
