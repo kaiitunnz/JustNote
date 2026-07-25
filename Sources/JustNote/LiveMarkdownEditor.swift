@@ -223,7 +223,7 @@ private final class MarkdownSemanticColorizerView: NSView {
                 var contentStart = markerEnd
                 while contentStart < contentEnd, text.character(at: contentStart) == 0x20 { contentStart += 1 }
                 if contentStart < contentEnd {
-                    storage.addAttribute(.foregroundColor, value: MarkdownPalette.headingColor(for: markerCount), range: NSRange(location: contentStart, length: contentEnd - contentStart))
+                    applyForegroundColor(MarkdownPalette.headingColor(for: markerCount), to: NSRange(location: contentStart, length: contentEnd - contentStart), storage: storage)
                 }
             }
             location = lineRange.location + lineRange.length
@@ -234,7 +234,7 @@ private final class MarkdownSemanticColorizerView: NSView {
         let range = NSRange(location: 0, length: storage.length)
         storage.enumerateAttribute(Self.blockquoteLevel, in: range, options: []) { value, range, _ in
             guard value != nil else { return }
-            storage.addAttribute(.foregroundColor, value: MarkdownPalette.teal, range: range)
+            applyForegroundColor(MarkdownPalette.teal, to: range, storage: storage)
         }
     }
 
@@ -258,7 +258,14 @@ private final class MarkdownSemanticColorizerView: NSView {
                 requiredTraits.map({ rangeHasFontTraits(contentRange, traits: $0, storage: storage) }) ?? true,
                 !requiresMonospace || rangeHasMonospacedFont(contentRange, storage: storage)
             else { return }
-            storage.addAttribute(.foregroundColor, value: color, range: contentRange)
+            applyForegroundColor(color, to: contentRange, storage: storage)
+        }
+    }
+
+    private func applyForegroundColor(_ color: NSColor, to range: NSRange, storage: NSTextStorage) {
+        storage.enumerateAttribute(.font, in: range, options: []) { value, visibleRange, _ in
+            guard let font = value as? NSFont, font.pointSize > 1 else { return }
+            storage.addAttribute(.foregroundColor, value: color, range: visibleRange)
         }
     }
 
