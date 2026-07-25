@@ -337,6 +337,7 @@ struct MenuView: View {
                         LiveMarkdownEditor(
                             text: model.bodyBinding(),
                             documentID: note.id,
+                            retainedDocumentIDs: Set(model.notes.map(\.id)),
                             onInteract: { model.collapseSelectionToPrimary() }
                         )
                         .contentShape(Rectangle())

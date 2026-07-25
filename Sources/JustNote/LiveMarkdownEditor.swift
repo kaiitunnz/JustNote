@@ -5,6 +5,7 @@ import SwiftUI
 struct LiveMarkdownEditor: View {
     @Binding var text: String
     let documentID: UUID
+    let retainedDocumentIDs: Set<UUID>
     var onInteract: (() -> Void)?
     @State private var codeBlocks: [CodeBlockSelection] = []
     @State private var copiedCodeBlockID: Int?
@@ -18,28 +19,31 @@ struct LiveMarkdownEditor: View {
                 fontName: NSFont.systemFont(ofSize: 13).fontName,
                 fontSize: 13,
                 documentId: documentID.uuidString,
-                onCodeBlockSelectionChange: { codeBlocks = $0 }
+                onCodeBlockSelectionChange: { codeBlocks = $0 },
+                retainedScrollDocumentIds: Set(retainedDocumentIDs.map(\.uuidString))
             )
             .background(MarkdownInteractionMonitor(onInteract: onInteract))
             .background(MarkdownSemanticColorizer(documentText: text))
 
             ForEach(codeBlocks) { selection in
-                if hoveredCodeBlockID == selection.id || copiedCodeBlockID == selection.id {
-                    CodeBlockCopyButton(selection: selection, copied: copiedCodeBlockID == selection.id) {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(selection.code, forType: .string)
-                        copiedCodeBlockID = selection.id
-                        if let app = NSApp {
-                            NSAccessibility.post(
-                                element: app,
-                                notification: .announcementRequested,
-                                userInfo: [.announcement: "Copied \(selection.language ?? "code")"]
-                            )
-                        }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
-                            guard copiedCodeBlockID == selection.id else { return }
-                            copiedCodeBlockID = nil
-                        }
+                CodeBlockCopyButton(
+                    selection: selection,
+                    copied: copiedCodeBlockID == selection.id,
+                    visible: hoveredCodeBlockID == selection.id || copiedCodeBlockID == selection.id
+                ) {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(selection.code, forType: .string)
+                    copiedCodeBlockID = selection.id
+                    if let app = NSApp {
+                        NSAccessibility.post(
+                            element: app,
+                            notification: .announcementRequested,
+                            userInfo: [.announcement: "Copied \(selection.language ?? "code")"]
+                        )
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+                        guard copiedCodeBlockID == selection.id else { return }
+                        copiedCodeBlockID = nil
                     }
                 }
             }
@@ -174,6 +178,7 @@ private final class MarkdownCodeBlockHoverMonitorView: NSView {
 private struct CodeBlockCopyButton: View {
     let selection: CodeBlockSelection
     let copied: Bool
+    let visible: Bool
     let onCopy: () -> Void
 
     var body: some View {
@@ -190,7 +195,10 @@ private struct CodeBlockCopyButton: View {
                 .shadow(color: .black.opacity(0.16), radius: 3, y: 1)
         }
         .buttonStyle(.plain)
+        .opacity(visible ? 1 : 0)
+        .allowsHitTesting(visible)
         .help(copied ? "Copied" : "Copy \(selection.language ?? "code")")
+        .accessibilityHidden(false)
         .accessibilityLabel("Copy \(selection.language ?? "code")")
         .accessibilityValue(copied ? "Copied" : "")
         .position(x: selection.rect.maxX - 21, y: selection.rect.minY + 21)
