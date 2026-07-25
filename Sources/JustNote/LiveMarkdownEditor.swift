@@ -278,14 +278,22 @@ private final class MarkdownSemanticColorizerView: NSView {
     private func rangeHasFontTraits(_ range: NSRange, traits: NSFontDescriptor.SymbolicTraits, storage: NSTextStorage) -> Bool {
         guard range.length > 0 else { return false }
         var hasTraits = true
+        var hasVisibleText = false
         storage.enumerateAttribute(.font, in: range, options: []) { value, _, stop in
-            guard let font = value as? NSFont, font.fontDescriptor.symbolicTraits.contains(traits) else {
+            guard let font = value as? NSFont else {
+                hasTraits = false
+                stop.pointee = true
+                return
+            }
+            guard font.pointSize > 1 else { return }
+            hasVisibleText = true
+            guard font.fontDescriptor.symbolicTraits.contains(traits) else {
                 hasTraits = false
                 stop.pointee = true
                 return
             }
         }
-        return hasTraits
+        return hasVisibleText && hasTraits
     }
 
     private func rangeHasMonospacedFont(_ range: NSRange, storage: NSTextStorage) -> Bool {
