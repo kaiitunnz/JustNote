@@ -6,17 +6,28 @@ struct LiveMarkdownEditor: View {
     @Binding var text: String
     let documentID: UUID
     var onInteract: (() -> Void)?
+    @State private var codeBlocks: [CodeBlockSelection] = []
 
     var body: some View {
-        NativeTextViewWrapper(
-            text: $text,
-            configuration: configuration,
-            fontName: NSFont.systemFont(ofSize: 13).fontName,
-            fontSize: 13,
-            documentId: documentID.uuidString
-        )
-        .background(MarkdownInteractionMonitor(onInteract: onInteract))
-        .background(MarkdownSemanticColorizer(documentText: text))
+        ZStack(alignment: .topLeading) {
+            NativeTextViewWrapper(
+                text: $text,
+                configuration: configuration,
+                fontName: NSFont.systemFont(ofSize: 13).fontName,
+                fontSize: 13,
+                documentId: documentID.uuidString,
+                onCodeBlockSelectionChange: { codeBlocks = $0 }
+            )
+            .background(MarkdownInteractionMonitor(onInteract: onInteract))
+            .background(MarkdownSemanticColorizer(documentText: text))
+
+            ForEach(codeBlocks) { selection in
+                CodeBlockButton(selection: selection) {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(selection.code, forType: .string)
+                }
+            }
+        }
     }
 
     private var configuration: MarkdownEditorConfiguration {
