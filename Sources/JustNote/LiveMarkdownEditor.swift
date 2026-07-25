@@ -8,6 +8,7 @@ struct LiveMarkdownEditor: View {
     var onInteract: (() -> Void)?
     @State private var codeBlocks: [CodeBlockSelection] = []
     @State private var copiedCodeBlockID: Int?
+    @State private var hoveredCodeBlockID: Int?
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -23,24 +24,27 @@ struct LiveMarkdownEditor: View {
             .background(MarkdownSemanticColorizer(documentText: text))
 
             ForEach(codeBlocks) { selection in
-                CodeBlockCopyButton(selection: selection, copied: copiedCodeBlockID == selection.id) {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(selection.code, forType: .string)
-                    copiedCodeBlockID = selection.id
-                    if let app = NSApp {
-                        NSAccessibility.post(
-                            element: app,
-                            notification: .announcementRequested,
-                            userInfo: [.announcement: "Copied \(selection.language ?? "code")"]
-                        )
-                    }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
-                        guard copiedCodeBlockID == selection.id else { return }
-                        copiedCodeBlockID = nil
+                if hoveredCodeBlockID == selection.id || copiedCodeBlockID == selection.id {
+                    CodeBlockCopyButton(selection: selection, copied: copiedCodeBlockID == selection.id) {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(selection.code, forType: .string)
+                        copiedCodeBlockID = selection.id
+                        if let app = NSApp {
+                            NSAccessibility.post(
+                                element: app,
+                                notification: .announcementRequested,
+                                userInfo: [.announcement: "Copied \(selection.language ?? "code")"]
+                            )
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+                            guard copiedCodeBlockID == selection.id else { return }
+                            copiedCodeBlockID = nil
+                        }
                     }
                 }
             }
         }
+        .background(MarkdownCodeBlockHoverMonitor(codeBlocks: codeBlocks, hoveredCodeBlockID: $hoveredCodeBlockID))
     }
 
     private var configuration: MarkdownEditorConfiguration {
@@ -59,6 +63,111 @@ struct LiveMarkdownEditor: View {
         configuration.textInsets = TextInsets(horizontal: 10, vertical: 10)
         configuration.overscroll = OverscrollPolicy(percent: 0, maxPoints: 0, minPoints: 0)
         return configuration
+    }
+}
+
+private struct MarkdownCodeBlockHoverMonitor: NSViewRepresentable {
+    let codeBlocks: [CodeBlockSelection]
+    @Binding var hoveredCodeBlockID: Int?
+
+    func makeNSView(context: Context) -> MarkdownCodeBlockHoverMonitorView {
+        MarkdownCodeBlockHoverMonitorView { hoveredCodeBlockID = $0 }
+    }
+
+    func updateNSView(_ view: MarkdownCodeBlockHoverMonitorView, context: Context) {
+        view.codeBlocks = codeBlocks
+        view.onHover = { hoveredCodeBlockID = $0 }
+        DispatchQueue.main.async {
+            view.refreshHover()
+        }
+    }
+
+    static func dismantleNSView(_ view: MarkdownCodeBlockHoverMonitorView, coordinator: ()) {
+        view.stopMonitoring()
+    }
+}
+
+private final class MarkdownCodeBlockHoverMonitorView: NSView {
+    var codeBlocks: [CodeBlockSelection] = []
+    var onHover: (Int?) -> Void
+    private var eventMonitor: Any?
+    private var hoveredCodeBlockID: Int?
+    private var originalAcceptsMouseMovedEvents: Bool?
+    private weak var monitoredWindow: NSWindow?
+
+    init(onHover: @escaping (Int?) -> Void) {
+        self.onHover = onHover
+        super.init(frame: .zero)
+    }
+
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil {
+            stopMonitoring()
+        } else {
+            startMonitoring()
+        }
+    }
+
+    deinit {
+        stopMonitoring()
+    }
+
+    func stopMonitoring() {
+        if let eventMonitor {
+            NSEvent.removeMonitor(eventMonitor)
+            self.eventMonitor = nil
+        }
+        if let originalAcceptsMouseMovedEvents {
+            monitoredWindow?.acceptsMouseMovedEvents = originalAcceptsMouseMovedEvents
+        }
+        originalAcceptsMouseMovedEvents = nil
+        monitoredWindow = nil
+        setHoveredCodeBlock(nil)
+    }
+
+    private func startMonitoring() {
+        guard eventMonitor == nil, let window else { return }
+        originalAcceptsMouseMovedEvents = window.acceptsMouseMovedEvents
+        monitoredWindow = window
+        window.acceptsMouseMovedEvents = true
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] event in
+            self?.updateHover(for: event)
+            return event
+        }
+    }
+
+    func refreshHover() {
+        guard let window else {
+            setHoveredCodeBlock(nil)
+            return
+        }
+        updateHover(at: window.convertPoint(fromScreen: NSEvent.mouseLocation))
+    }
+
+    private func updateHover(for event: NSEvent) {
+        guard let window, event.window === window else { return }
+        updateHover(at: event.locationInWindow)
+    }
+
+    private func updateHover(at locationInWindow: CGPoint) {
+        let appKitLocation = convert(locationInWindow, from: nil)
+        guard bounds.contains(appKitLocation) else {
+            setHoveredCodeBlock(nil)
+            return
+        }
+        let location = CGPoint(x: appKitLocation.x, y: bounds.height - appKitLocation.y)
+        setHoveredCodeBlock(codeBlocks.first(where: { $0.rect.contains(location) })?.id)
+    }
+
+    private func setHoveredCodeBlock(_ id: Int?) {
+        guard hoveredCodeBlockID != id else { return }
+        hoveredCodeBlockID = id
+        onHover(id)
     }
 }
 
