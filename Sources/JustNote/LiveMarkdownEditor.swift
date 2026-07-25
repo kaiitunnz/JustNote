@@ -20,6 +20,14 @@ struct LiveMarkdownEditor: View {
 
     private var configuration: MarkdownEditorConfiguration {
         var configuration = MarkdownEditorConfiguration.default
+        configuration.theme.link = NSColor(Theme.accent)
+        configuration.theme.incompleteLink = NSColor(Theme.accent).withAlphaComponent(0.7)
+        configuration.theme.headingMarker = .secondaryLabelColor
+        configuration.headings = HeadingStyle(
+            fontMultipliers: [1.55, 1.32, 1.18, 1.08, 1, 1],
+            topSpacingEm: [0.25, 0.22, 0.20, 0.16, 0.14, 0.12]
+        )
+        configuration.paragraph = ParagraphStyle(spacingFactor: 0.16, lineHeightExtraSpacing: 1)
         configuration.textInsets = TextInsets(horizontal: 10, vertical: 10)
         configuration.overscroll = OverscrollPolicy(percent: 0, maxPoints: 0, minPoints: 0)
         return configuration
