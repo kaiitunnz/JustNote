@@ -66,40 +66,25 @@ private struct CodeBlockCopyButton: View {
     let selection: CodeBlockSelection
     let copied: Bool
     let onCopy: () -> Void
-    @State private var isHovering = false
 
     var body: some View {
-        Color.clear
-            .frame(width: selection.rect.width, height: selection.rect.height)
-            .overlay(alignment: .topTrailing) {
-                Button(action: onCopy) {
-                    HStack(spacing: 5) {
-                        Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                            .font(.system(size: 11, weight: .semibold))
-                        if isHovering || copied {
-                            Text(copied ? "Copied" : "Copy")
-                                .font(Theme.rounded(11, weight: .semibold))
-                        }
-                    }
-                    .foregroundStyle(copied ? Color(nsColor: MarkdownPalette.blue) : Color.primary.opacity(isHovering ? 0.95 : 0.68))
-                    .frame(minWidth: 28, minHeight: 28)
-                    .padding(.horizontal, isHovering || copied ? 9 : 0)
-                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(Color.white.opacity(isHovering ? 0.2 : 0.1))
-                    }
-                    .shadow(color: .black.opacity(isHovering ? 0.22 : 0.12), radius: isHovering ? 5 : 2, y: 1)
+        Button(action: onCopy) {
+            Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(copied ? Color(nsColor: MarkdownPalette.blue) : Color.primary.opacity(0.72))
+                .frame(width: 26, height: 26)
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 7))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 7)
+                        .strokeBorder(Color.white.opacity(0.12))
                 }
-                .buttonStyle(.plain)
-                .help(copied ? "Copied" : "Copy \(selection.language ?? "code")")
-                .accessibilityLabel("Copy \(selection.language ?? "code")")
-                .accessibilityValue(copied ? "Copied" : "")
-                .onHover { isHovering = $0 }
-                .padding(.top, 8)
-                .padding(.trailing, 8)
-            }
-            .position(x: selection.rect.midX, y: selection.rect.midY)
+                .shadow(color: .black.opacity(0.16), radius: 3, y: 1)
+        }
+        .buttonStyle(.plain)
+        .help(copied ? "Copied" : "Copy \(selection.language ?? "code")")
+        .accessibilityLabel("Copy \(selection.language ?? "code")")
+        .accessibilityValue(copied ? "Copied" : "")
+        .position(x: selection.rect.maxX - 21, y: selection.rect.minY + 21)
     }
 }
 
