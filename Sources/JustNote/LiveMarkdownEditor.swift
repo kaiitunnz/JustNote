@@ -16,13 +16,17 @@ struct LiveMarkdownEditor: View {
             documentId: documentID.uuidString
         )
         .background(MarkdownInteractionMonitor(onInteract: onInteract))
+        .background(MarkdownSemanticColorizer(documentText: text))
     }
 
     private var configuration: MarkdownEditorConfiguration {
         var configuration = MarkdownEditorConfiguration.default
-        configuration.theme.link = NSColor(Theme.accent)
-        configuration.theme.incompleteLink = NSColor(Theme.accent).withAlphaComponent(0.7)
-        configuration.theme.headingMarker = .secondaryLabelColor
+        configuration.theme.headingMarker = MarkdownPalette.blue
+        configuration.theme.link = MarkdownPalette.blue
+        configuration.theme.incompleteLink = MarkdownPalette.orange
+        configuration.theme.findMatchHighlight = MarkdownPalette.searchMatch
+        configuration.theme.findCurrentMatchHighlight = MarkdownPalette.currentSearchMatch
+        configuration.theme.highlightColor = MarkdownPalette.highlight
         configuration.headings = HeadingStyle(
             fontMultipliers: [1.55, 1.32, 1.18, 1.08, 1, 1],
             topSpacingEm: [0.25, 0.22, 0.20, 0.16, 0.14, 0.12]
@@ -32,6 +36,244 @@ struct LiveMarkdownEditor: View {
         configuration.overscroll = OverscrollPolicy(percent: 0, maxPoints: 0, minPoints: 0)
         return configuration
     }
+}
+
+private enum MarkdownPalette {
+    static let blue = color(light: 0x086DDD, dark: 0x2E80F2)
+    static let pink = color(light: 0xC32B74, dark: 0xFF82B2)
+    static let teal = color(light: 0x177E89, dark: 0x3EB4BF)
+    static let yellow = color(light: 0x9A6A21, dark: 0xE5B567)
+    static let orange = color(light: 0xC45D22, dark: 0xE87D3E)
+    static let red = color(light: 0xC33131, dark: 0xE83E3E)
+    static let purple = color(light: 0x7252A0, dark: 0x9E86C8)
+    static let searchMatch = color(light: 0xFFE4A3, dark: 0x5F4D22)
+    static let currentSearchMatch = color(light: 0xFFC857, dark: 0x8B6A23)
+    static let highlight = color(light: 0xFFF0C2, dark: 0x584618)
+
+    static func headingColor(for level: Int) -> NSColor {
+        switch level {
+        case 1, 2: .labelColor
+        case 3: blue
+        case 4: yellow
+        case 5: red
+        default: .secondaryLabelColor
+        }
+    }
+
+    private static func color(light: Int, dark: Int) -> NSColor {
+        NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+                ? nsColor(dark)
+                : nsColor(light)
+        }
+    }
+
+    private static func nsColor(_ hex: Int) -> NSColor {
+        NSColor(
+            red: CGFloat((hex >> 16) & 0xFF) / 255,
+            green: CGFloat((hex >> 8) & 0xFF) / 255,
+            blue: CGFloat(hex & 0xFF) / 255,
+            alpha: 1
+        )
+    }
+}
+
+private struct MarkdownSemanticColorizer: NSViewRepresentable {
+    let documentText: String
+
+    func makeNSView(context: Context) -> MarkdownSemanticColorizerView {
+        MarkdownSemanticColorizerView(documentText: documentText)
+    }
+
+    func updateNSView(_ view: MarkdownSemanticColorizerView, context: Context) {
+        view.updateDocumentText(documentText)
+    }
+
+    static func dismantleNSView(_ view: MarkdownSemanticColorizerView, coordinator: ()) {
+        view.stopObserving()
+    }
+}
+
+private final class MarkdownSemanticColorizerView: NSView {
+    private weak var textView: NSTextView?
+    private var observers: [NSObjectProtocol] = []
+    private var updateScheduled = false
+    private var documentText: String
+
+    init(documentText: String) {
+        self.documentText = documentText
+        super.init(frame: .zero)
+    }
+
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil {
+            stopObserving()
+        } else {
+            startObserving()
+        }
+    }
+
+    deinit {
+        stopObserving()
+    }
+
+    func stopObserving() {
+        observers.forEach(NotificationCenter.default.removeObserver)
+        observers.removeAll()
+        textView = nil
+        updateScheduled = false
+    }
+
+    func updateDocumentText(_ documentText: String) {
+        self.documentText = documentText
+        guard window != nil else { return }
+        rebindTextView()
+        scheduleUpdate()
+    }
+
+    private func startObserving() {
+        guard observers.isEmpty else { return }
+        guard rebindTextView() else {
+            DispatchQueue.main.async { [weak self] in
+                self?.startObserving()
+            }
+            return
+        }
+        scheduleUpdate()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            self?.scheduleUpdate()
+        }
+    }
+
+    @discardableResult
+    private func rebindTextView() -> Bool {
+        guard let textView = matchingTextView() else { return false }
+        guard self.textView !== textView || observers.isEmpty else { return true }
+
+        observers.forEach(NotificationCenter.default.removeObserver)
+        observers.removeAll()
+        self.textView = textView
+        let center = NotificationCenter.default
+        observers = [
+            center.addObserver(forName: NSText.didChangeNotification, object: textView, queue: .main) { [weak self] _ in
+                self?.scheduleUpdate()
+            },
+            center.addObserver(forName: NSTextView.didChangeSelectionNotification, object: textView, queue: .main) { [weak self] _ in
+                self?.scheduleUpdate()
+            }
+        ]
+        return true
+    }
+
+    private func matchingTextView() -> NSTextView? {
+        let normalizedDocumentText = documentText.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+        let textViews = window?.contentView?.textViews ?? []
+        return textViews.first {
+            $0.string.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n") == normalizedDocumentText
+        } ?? (window?.firstResponder as? NSTextView) ?? textViews.first
+    }
+
+    private func scheduleUpdate() {
+        guard !updateScheduled else { return }
+        updateScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.updateScheduled = false
+            self.colorMarkdown()
+        }
+    }
+
+    private func colorMarkdown() {
+        _ = rebindTextView()
+        guard let textView, let storage = textView.textStorage else { return }
+        let text = textView.string as NSString
+        var location = 0
+        var fencedCodeStart: Int?
+        var fencedCodeRanges: [NSRange] = []
+
+        storage.beginEditing()
+        defer { storage.endEditing() }
+
+        while location < text.length {
+            let lineRange = text.lineRange(for: NSRange(location: location, length: 0))
+            let contentEnd = lineRange.location + lineRange.length - (text.substring(with: lineRange).hasSuffix("\n") ? 1 : 0)
+            let line = text.substring(with: NSRange(location: lineRange.location, length: contentEnd - lineRange.location))
+
+            if line.trimmingCharacters(in: .whitespaces).hasPrefix("```") {
+                if let start = fencedCodeStart {
+                    fencedCodeRanges.append(NSRange(location: start, length: lineRange.location + lineRange.length - start))
+                    fencedCodeStart = nil
+                } else {
+                    fencedCodeStart = lineRange.location
+                }
+                location = lineRange.location + lineRange.length
+                continue
+            }
+
+            if fencedCodeStart == nil {
+                colorBlock(in: lineRange, contentEnd: contentEnd, text: text, storage: storage)
+            }
+            location = lineRange.location + lineRange.length
+        }
+
+        if let start = fencedCodeStart {
+            fencedCodeRanges.append(NSRange(location: start, length: text.length - start))
+        }
+
+        colorMatches(Self.strongExpression, color: MarkdownPalette.pink, text: text, storage: storage, excluding: fencedCodeRanges)
+        colorMatches(Self.emphasisExpression, color: MarkdownPalette.pink, text: text, storage: storage, excluding: fencedCodeRanges)
+        colorMatches(Self.underscoreEmphasisExpression, color: MarkdownPalette.pink, text: text, storage: storage, excluding: fencedCodeRanges)
+        colorMatches(Self.inlineCodeExpression, color: MarkdownPalette.purple, text: text, storage: storage, excluding: fencedCodeRanges)
+    }
+
+    private func colorBlock(in lineRange: NSRange, contentEnd: Int, text: NSString, storage: NSTextStorage) {
+        var markerEnd = lineRange.location
+        while markerEnd < contentEnd, text.character(at: markerEnd) == 0x23 { markerEnd += 1 }
+
+        let markerCount = markerEnd - lineRange.location
+        if (1...6).contains(markerCount), markerEnd < contentEnd, text.character(at: markerEnd) == 0x20 {
+            let range = NSRange(location: markerEnd + 1, length: contentEnd - markerEnd - 1)
+            storage.addAttribute(.foregroundColor, value: MarkdownPalette.headingColor(for: markerCount), range: range)
+            return
+        }
+
+        var quoteStart = lineRange.location
+        while quoteStart < contentEnd, text.character(at: quoteStart) == 0x20 { quoteStart += 1 }
+        guard quoteStart < contentEnd, text.character(at: quoteStart) == 0x3E else { return }
+
+        while quoteStart < contentEnd, text.character(at: quoteStart) == 0x3E || text.character(at: quoteStart) == 0x20 {
+            quoteStart += 1
+        }
+        storage.addAttribute(.foregroundColor, value: MarkdownPalette.teal, range: NSRange(location: quoteStart, length: contentEnd - quoteStart))
+    }
+
+    private func colorMatches(
+        _ expression: NSRegularExpression,
+        color: NSColor,
+        text: NSString,
+        storage: NSTextStorage,
+        excluding excludedRanges: [NSRange]
+    ) {
+        let range = NSRange(location: 0, length: text.length)
+        expression.matches(in: text as String, range: range).forEach { match in
+            let contentRange = match.range(at: 2)
+            guard
+                contentRange.location != NSNotFound,
+                !excludedRanges.contains(where: { NSIntersectionRange($0, contentRange).length > 0 })
+            else { return }
+            storage.addAttribute(.foregroundColor, value: color, range: contentRange)
+        }
+    }
+
+    private static let strongExpression = try! NSRegularExpression(pattern: #"(?<!\\)(\*\*|__)(.+?)(?<!\\)\1"#)
+    private static let emphasisExpression = try! NSRegularExpression(pattern: #"(?<!\\)(?<!\*)(\*)(?!\*)([^*\n]+?)(?<!\\)\1(?!\*)"#)
+    private static let underscoreEmphasisExpression = try! NSRegularExpression(pattern: #"(?<!\\)(?<!_)(_)(?!_)([^_\n]+?)(?<!\\)\1(?!_)"#)
+    private static let inlineCodeExpression = try! NSRegularExpression(pattern: #"(?<!\\)(`)([^`\n]+)`"#)
 }
 
 private struct MarkdownInteractionMonitor: NSViewRepresentable {
@@ -110,5 +352,10 @@ private extension NSView {
             if let textView = subview.firstTextView { return textView }
         }
         return nil
+    }
+
+    var textViews: [NSTextView] {
+        let ownTextView = (self as? NSTextView).map { [$0] } ?? []
+        return ownTextView + subviews.flatMap(\.textViews)
     }
 }
