@@ -25,11 +25,10 @@ settings:
       DEVELOPMENT_TEAM: "C62G6XUR78"
 
 packages:
-  MarkdownView:
-    url: https://github.com/LiYanan2004/MarkdownView.git
-    # Pinned to a main commit: the 2.7.0 release fails to compile against the macOS 27 SDK
-    # ('Document' ambiguity), fixed on main.
-    revision: 7f55e9dc4cee6b788ac94b6187b2e0ce663c00df
+  MarkdownEngine:
+    url: https://github.com/nodes-app/swift-markdown-engine.git
+    # Pre-1.0 package: pin exactly so its editor behavior and API do not drift between checkouts.
+    exactVersion: 0.10.0
   KeyboardShortcuts:
     url: https://github.com/sindresorhus/KeyboardShortcuts.git
     # Exact-version pin (the .xcodeproj — and its Package.resolved — is git-ignored, so a
@@ -55,7 +54,7 @@ targets:
       - path: Resources/JustNote.icon
         type: file
     dependencies:
-      - package: MarkdownView
+      - package: MarkdownEngine
       - package: KeyboardShortcuts
     settings:
       base:

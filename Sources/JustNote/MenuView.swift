@@ -1,19 +1,28 @@
 import AppKit
-import MarkdownView
 import SwiftUI
 import UniformTypeIdentifiers
+
+private enum EditorMode: String {
+    case plainText
+    case markdown
+}
 
 struct MenuView: View {
     @ObservedObject var model: AppModel
     @AppStorage("sidebarWidth") private var sidebarWidth = Double(Theme.sidebarWidth)
     @AppStorage("wrapLines") private var wrapLines = true
-    @AppStorage("previewMode") private var isPreviewing = false
+    @AppStorage("editorMode") private var editorModeRaw = EditorMode.plainText.rawValue
     @AppStorage("sidebarCollapsed") private var sidebarCollapsed = false
     @State private var showingUninstallConfirmation = false
     @State private var draggingNoteID: UUID?
     @State private var splitDragStartWidth: Double?
     @State private var wrapIcon: String?
     @State private var wrapToken = 0
+
+    init(model: AppModel) {
+        self.model = model
+        _editorModeRaw = AppStorage(wrappedValue: Self.initialEditorModeRawValue(), "editorMode")
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -302,7 +311,7 @@ struct MenuView: View {
                         TimestampText(date: note.updatedAt)
                     }
                     Spacer()
-                    if !isPreviewing {
+                    if editorMode == .plainText {
                         Button {
                             wrapLines.toggle()
                         } label: {
@@ -313,27 +322,25 @@ struct MenuView: View {
                         .help(wrapLines ? "Soft wrap is on" : "Soft wrap is off")
                     }
                     Button {
-                        togglePreviewMode()
+                        toggleEditorMode()
                     } label: {
-                        Image(systemName: isPreviewing ? "eye" : "pencil")
+                        Image(systemName: editorMode == .markdown ? "text.badge.checkmark" : "textformat")
                             .font(.system(size: 12, weight: .semibold))
                     }
                     .buttonStyle(HeaderIconButtonStyle())
-                    .help(isPreviewing ? "Edit note" : "Preview markdown")
+                    .help(editorMode == .markdown ? "Switch to Plain Text mode" : "Switch to Markdown mode")
                 }
                 .collapsesSelectionOnTap(model)
 
                 Group {
-                    if isPreviewing {
-                        ScrollView {
-                            MarkdownText(note.body)
-                                .markdownCodeBlockStyle(NormalizedCodeBlockStyle())
-                                .padding(12)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
+                    if editorMode == .markdown {
+                        LiveMarkdownEditor(
+                            text: model.bodyBinding(),
+                            documentID: note.id,
+                            retainedDocumentIDs: Set(model.notes.map(\.id)),
+                            onInteract: { model.collapseSelectionToPrimary() }
+                        )
                         .contentShape(Rectangle())
-                        // Simultaneous, not collapsesSelectionOnTap, so tapping a Markdown link still opens it.
-                        .simultaneousGesture(TapGesture().onEnded { model.collapseSelectionToPrimary() })
                     } else {
                         PlainTextEditor(
                             text: model.bodyBinding(),
@@ -363,7 +370,7 @@ struct MenuView: View {
             // Like collapsesSelectionOnTap, but also drops text focus when tapping around the editor.
             Color.clear.contentShape(Rectangle()).onTapGesture {
                 model.collapseSelectionToPrimary()
-                if !isPreviewing { resignTextFocus() }
+                if editorMode == .plainText { resignTextFocus() }
             }
         }
     }
@@ -414,7 +421,7 @@ struct MenuView: View {
     }
 
     private func createNote() {
-        isPreviewing = false
+        editorMode = .plainText
         model.createNote()
     }
 
@@ -487,7 +494,7 @@ struct MenuView: View {
 
     private func pasteAsNewNote() {
         guard let text = pasteboardText else { return }
-        isPreviewing = false
+        editorMode = .plainText
         model.createNote(body: text)
     }
 
@@ -500,9 +507,9 @@ struct MenuView: View {
         withAnimation(.easeInOut(duration: 0.18)) { sidebarCollapsed.toggle() }
     }
 
-    private func togglePreviewMode() {
+    private func toggleEditorMode() {
         guard model.selectedNote != nil else { return }
-        isPreviewing.toggle()
+        editorMode = editorMode == .plainText ? .markdown : .plainText
     }
 
     private var keyboardShortcuts: some View {
@@ -519,7 +526,7 @@ struct MenuView: View {
                 .keyboardShortcut("a", modifiers: [.command, .option])
             Button("Toggle sidebar") { toggleSidebar() }
                 .keyboardShortcut("e", modifiers: [.command, .shift])
-            Button("Toggle Markdown preview") { togglePreviewMode() }
+            Button("Toggle editor mode") { toggleEditorMode() }
                 .keyboardShortcut("v", modifiers: [.command, .shift])
                 .disabled(model.selectedNote == nil)
             Button("Toggle soft wrap") { wrapLines.toggle() }
@@ -576,6 +583,23 @@ struct MenuView: View {
     private func quit() {
         AppDelegate.shared?.isQuitting = true
         NSApplication.shared.terminate(nil)
+    }
+
+    private var editorMode: EditorMode {
+        get { EditorMode(rawValue: editorModeRaw) ?? .plainText }
+        nonmutating set { editorModeRaw = newValue.rawValue }
+    }
+
+    private static func initialEditorModeRawValue() -> String {
+        let defaults = UserDefaults.standard
+        if let editorModeRaw = defaults.string(forKey: "editorMode") {
+            return editorModeRaw
+        }
+        let legacyPreviewMode = defaults.bool(forKey: "previewMode")
+        let editorModeRaw = (legacyPreviewMode ? EditorMode.markdown : .plainText).rawValue
+        defaults.set(editorModeRaw, forKey: "editorMode")
+        defaults.removeObject(forKey: "previewMode")
+        return editorModeRaw
     }
 
     private var splitDrag: some Gesture {
@@ -765,8 +789,8 @@ private extension View {
     /// Applied to every non-card region of the panel (header, sidebar, editor header, footer). It uses
     /// `onTapGesture` so note cards and buttons keep gesture priority — a tap collapses only when it
     /// lands on inert chrome, never stealing a card selection or a pin/delete press. The editor
-    /// background additionally resigns text focus, the Markdown preview uses a simultaneous tap so
-    /// links still open, and the plain-text editor collapses from its AppKit `mouseDown` hook.
+    /// background additionally resigns plain-text focus, while both native editors collapse from
+    /// their AppKit interaction hooks.
     func collapsesSelectionOnTap(_ model: AppModel) -> some View {
         contentShape(Rectangle())
             .onTapGesture { model.collapseSelectionToPrimary() }

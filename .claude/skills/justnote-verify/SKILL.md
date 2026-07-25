@@ -22,7 +22,7 @@ xcodebuild -project JustNote.xcodeproj -scheme JustNote -configuration Debug -de
 xcodebuild test -project JustNote.xcodeproj -scheme JustNote -configuration Debug -derivedDataPath build -destination 'platform=macOS'
 ```
 
-Expect `** BUILD SUCCEEDED **` and 15 passing tests (all `JustNoteTests`, model-only). The
+Expect `** BUILD SUCCEEDED **` and 14 passing tests (all `JustNoteTests`, model-only). The
 `com.apple.linkd.autoShortcut` connection warnings in test output are harmless.
 
 ## Launch & summon the panel
@@ -58,7 +58,7 @@ osascript -e 'tell application "System Events" to tell process "JustNote" to get
 osascript -e 'tell application "System Events" to tell process "JustNote" to get {position, size} of (first button of group 1 of window 1 whose help is "New note")'
 ```
 
-Button `help` values: `New note`, `Pin note`, `Delete note`, `Hide sidebar`, `Preview markdown`,
+Button `help` values: `New note`, `Pin note`, `Delete note`, `Hide sidebar`, `Switch to Markdown mode`,
 `Reveal storage in Finder`, `Settings`.
 
 **AXPress vs. real click:** `click (button … )` via AX invokes the action directly and bypasses
