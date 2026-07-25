@@ -69,8 +69,8 @@ hidden. Rationale, each a real dead end tried and rejected:
 
 ## Dependencies (pinned deliberately)
 
-- **MarkdownView** — pinned to a `main` **commit**; the 2.7.0 release fails to compile against the
-  macOS 27 SDK (`Document` ambiguity).
+- **MarkdownEngine** — exact version 0.10.0. It supplies the editable TextKit 2 live-Markdown
+  surface; pin it exactly because it is pre-1.0 and the generated Xcode project is ignored.
 - **KeyboardShortcuts** — `exactVersion` 1.9.4. Backed by Carbon `RegisterEventHotKey`, so the global
   shortcut needs **no Accessibility/Input-Monitoring prompt**. Pinned exactly because the `.xcodeproj`
   (and its `Package.resolved`) is git-ignored, so a range would let checkouts drift.
