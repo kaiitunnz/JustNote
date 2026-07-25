@@ -16,19 +16,17 @@ struct LiveMarkdownEditor: View {
             documentId: documentID.uuidString
         )
         .background(MarkdownInteractionMonitor(onInteract: onInteract))
+        .background(MarkdownHeadingColorizer())
     }
 
     private var configuration: MarkdownEditorConfiguration {
         var configuration = MarkdownEditorConfiguration.default
-        configuration.theme.bodyText = MarkdownPalette.body
-        configuration.theme.mutedText = MarkdownPalette.muted
-        configuration.theme.disabledText = MarkdownPalette.disabled
         configuration.theme.headingMarker = MarkdownPalette.accent
         configuration.theme.link = MarkdownPalette.accent
         configuration.theme.incompleteLink = MarkdownPalette.incompleteLink
         configuration.theme.findMatchHighlight = MarkdownPalette.findMatch
         configuration.theme.findCurrentMatchHighlight = MarkdownPalette.currentFindMatch
-        configuration.theme.strikethroughColor = MarkdownPalette.muted
+        configuration.theme.strikethroughColor = .secondaryLabelColor
         configuration.theme.highlightColor = MarkdownPalette.highlight
         configuration.headings = HeadingStyle(
             fontMultipliers: [1.55, 1.32, 1.18, 1.08, 1, 1],
@@ -42,9 +40,6 @@ struct LiveMarkdownEditor: View {
 }
 
 private enum MarkdownPalette {
-    static let body = color(light: 0x1B2A41, dark: 0x92B5F4)
-    static let muted = color(light: 0x61738E, dark: 0x6F8FC4)
-    static let disabled = color(light: 0x8A96A8, dark: 0x4F6D9D)
     static let accent = color(light: 0x3D6FB8, dark: 0x7AA8F8)
     static let incompleteLink = color(light: 0xA65E1C, dark: 0xF0A15E)
     static let findMatch = color(light: 0xD8E7FF, dark: 0x334A72)
@@ -66,6 +61,99 @@ private enum MarkdownPalette {
             blue: CGFloat(hex & 0xFF) / 255,
             alpha: 1
         )
+    }
+}
+
+private struct MarkdownHeadingColorizer: NSViewRepresentable {
+    func makeNSView(context: Context) -> MarkdownHeadingColorizerView {
+        MarkdownHeadingColorizerView()
+    }
+
+    func updateNSView(_ view: MarkdownHeadingColorizerView, context: Context) {}
+
+    static func dismantleNSView(_ view: MarkdownHeadingColorizerView, coordinator: ()) {
+        view.stopObserving()
+    }
+}
+
+private final class MarkdownHeadingColorizerView: NSView {
+    private weak var textView: NSTextView?
+    private var observers: [NSObjectProtocol] = []
+    private var updateScheduled = false
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil {
+            stopObserving()
+        } else {
+            startObserving()
+        }
+    }
+
+    deinit {
+        stopObserving()
+    }
+
+    func stopObserving() {
+        observers.forEach(NotificationCenter.default.removeObserver)
+        observers.removeAll()
+        textView = nil
+        updateScheduled = false
+    }
+
+    private func startObserving() {
+        guard observers.isEmpty else { return }
+        guard let textView = window?.contentView?.firstTextView else {
+            DispatchQueue.main.async { [weak self] in
+                self?.startObserving()
+            }
+            return
+        }
+        self.textView = textView
+        let center = NotificationCenter.default
+        observers = [
+            center.addObserver(forName: NSText.didChangeNotification, object: textView, queue: .main) { [weak self] _ in
+                self?.scheduleUpdate()
+            },
+            center.addObserver(forName: NSTextView.didChangeSelectionNotification, object: textView, queue: .main) { [weak self] _ in
+                self?.scheduleUpdate()
+            }
+        ]
+        scheduleUpdate()
+    }
+
+    private func scheduleUpdate() {
+        guard !updateScheduled else { return }
+        updateScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.updateScheduled = false
+            self.colorHeadings()
+        }
+    }
+
+    private func colorHeadings() {
+        guard let textView, let storage = textView.textStorage else { return }
+        let text = textView.string as NSString
+        var location = 0
+
+        while location < text.length {
+            let lineRange = text.lineRange(for: NSRange(location: location, length: 0))
+            let contentEnd = lineRange.location + lineRange.length - (text.substring(with: lineRange).hasSuffix("\n") ? 1 : 0)
+            var markerEnd = lineRange.location
+
+            while markerEnd < contentEnd, text.character(at: markerEnd) == 0x23 {
+                markerEnd += 1
+            }
+
+            let markerCount = markerEnd - lineRange.location
+            if (1...6).contains(markerCount), markerEnd < contentEnd, text.character(at: markerEnd) == 0x20 {
+                let headingRange = NSRange(location: markerEnd + 1, length: contentEnd - markerEnd - 1)
+                storage.addAttribute(.foregroundColor, value: MarkdownPalette.accent, range: headingRange)
+            }
+
+            location = lineRange.location + lineRange.length
+        }
     }
 }
 
