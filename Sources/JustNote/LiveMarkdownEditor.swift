@@ -27,6 +27,13 @@ struct LiveMarkdownEditor: View {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(selection.code, forType: .string)
                     copiedCodeBlockID = selection.id
+                    if let app = NSApp {
+                        NSAccessibility.post(
+                            element: app,
+                            notification: .announcementRequested,
+                            userInfo: [.announcement: "Copied \(selection.language ?? "code")"]
+                        )
+                    }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
                         guard copiedCodeBlockID == selection.id else { return }
                         copiedCodeBlockID = nil
@@ -66,20 +73,28 @@ private struct CodeBlockCopyButton: View {
             .frame(width: selection.rect.width, height: selection.rect.height)
             .overlay(alignment: .topTrailing) {
                 Button(action: onCopy) {
-                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(copied ? Theme.accent : Color.primary.opacity(isHovering ? 0.95 : 0.68))
-                        .frame(width: 28, height: 28)
-                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 8)
-                                .strokeBorder(Color.white.opacity(isHovering ? 0.2 : 0.1))
+                    HStack(spacing: 5) {
+                        Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 11, weight: .semibold))
+                        if isHovering || copied {
+                            Text(copied ? "Copied" : "Copy")
+                                .font(Theme.rounded(11, weight: .semibold))
                         }
-                        .shadow(color: .black.opacity(isHovering ? 0.22 : 0.12), radius: isHovering ? 5 : 2, y: 1)
+                    }
+                    .foregroundStyle(copied ? Color(nsColor: MarkdownPalette.blue) : Color.primary.opacity(isHovering ? 0.95 : 0.68))
+                    .frame(minWidth: 28, minHeight: 28)
+                    .padding(.horizontal, isHovering || copied ? 9 : 0)
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(Color.white.opacity(isHovering ? 0.2 : 0.1))
+                    }
+                    .shadow(color: .black.opacity(isHovering ? 0.22 : 0.12), radius: isHovering ? 5 : 2, y: 1)
                 }
                 .buttonStyle(.plain)
                 .help(copied ? "Copied" : "Copy \(selection.language ?? "code")")
-                .accessibilityLabel(copied ? "Copied" : "Copy \(selection.language ?? "code")")
+                .accessibilityLabel("Copy \(selection.language ?? "code")")
+                .accessibilityValue(copied ? "Copied" : "")
                 .onHover { isHovering = $0 }
                 .padding(.top, 8)
                 .padding(.trailing, 8)
