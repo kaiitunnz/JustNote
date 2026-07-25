@@ -42,11 +42,11 @@ struct LiveMarkdownEditor: View {
 }
 
 private enum MarkdownPalette {
-    static let body = color(light: 0x1B2A41, dark: 0xC9D7EC)
-    static let muted = color(light: 0x61738E, dark: 0x8FA8C8)
-    static let disabled = color(light: 0x8A96A8, dark: 0x687B96)
-    static let accent = color(light: 0x3D6FB8, dark: 0x85ADF0)
-    static let incompleteLink = color(light: 0xA65E1C, dark: 0xF0AA69)
+    static let body = color(light: 0x1B2A41, dark: 0x92B5F4)
+    static let muted = color(light: 0x61738E, dark: 0x6F8FC4)
+    static let disabled = color(light: 0x8A96A8, dark: 0x4F6D9D)
+    static let accent = color(light: 0x3D6FB8, dark: 0x7AA8F8)
+    static let incompleteLink = color(light: 0xA65E1C, dark: 0xF0A15E)
     static let findMatch = color(light: 0xD8E7FF, dark: 0x334A72)
     static let currentFindMatch = color(light: 0xA9CCFF, dark: 0x456AA0)
     static let highlight = color(light: 0xFFF0B3, dark: 0x66531C)
