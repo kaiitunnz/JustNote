@@ -7,6 +7,7 @@ struct LiveMarkdownEditor: View {
     let documentID: UUID
     var onInteract: (() -> Void)?
     @State private var codeBlocks: [CodeBlockSelection] = []
+    @State private var copiedCodeBlockID: Int?
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -22,9 +23,14 @@ struct LiveMarkdownEditor: View {
             .background(MarkdownSemanticColorizer(documentText: text))
 
             ForEach(codeBlocks) { selection in
-                CodeBlockButton(selection: selection) {
+                CodeBlockCopyButton(selection: selection, copied: copiedCodeBlockID == selection.id) {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(selection.code, forType: .string)
+                    copiedCodeBlockID = selection.id
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+                        guard copiedCodeBlockID == selection.id else { return }
+                        copiedCodeBlockID = nil
+                    }
                 }
             }
         }
@@ -46,6 +52,39 @@ struct LiveMarkdownEditor: View {
         configuration.textInsets = TextInsets(horizontal: 10, vertical: 10)
         configuration.overscroll = OverscrollPolicy(percent: 0, maxPoints: 0, minPoints: 0)
         return configuration
+    }
+}
+
+private struct CodeBlockCopyButton: View {
+    let selection: CodeBlockSelection
+    let copied: Bool
+    let onCopy: () -> Void
+    @State private var isHovering = false
+
+    var body: some View {
+        Color.clear
+            .frame(width: selection.rect.width, height: selection.rect.height)
+            .overlay(alignment: .topTrailing) {
+                Button(action: onCopy) {
+                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(copied ? Theme.accent : Color.primary.opacity(isHovering ? 0.95 : 0.68))
+                        .frame(width: 28, height: 28)
+                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 8)
+                                .strokeBorder(Color.white.opacity(isHovering ? 0.2 : 0.1))
+                        }
+                        .shadow(color: .black.opacity(isHovering ? 0.22 : 0.12), radius: isHovering ? 5 : 2, y: 1)
+                }
+                .buttonStyle(.plain)
+                .help(copied ? "Copied" : "Copy \(selection.language ?? "code")")
+                .accessibilityLabel(copied ? "Copied" : "Copy \(selection.language ?? "code")")
+                .onHover { isHovering = $0 }
+                .padding(.top, 8)
+                .padding(.trailing, 8)
+            }
+            .position(x: selection.rect.midX, y: selection.rect.midY)
     }
 }
 
