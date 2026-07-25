@@ -324,7 +324,7 @@ struct MenuView: View {
                     Button {
                         toggleEditorMode()
                     } label: {
-                        Image(systemName: editorMode == .markdown ? "textformat" : "text.badge.checkmark")
+                        Image(systemName: editorMode == .markdown ? "text.badge.checkmark" : "textformat")
                             .font(.system(size: 12, weight: .semibold))
                     }
                     .buttonStyle(HeaderIconButtonStyle())
