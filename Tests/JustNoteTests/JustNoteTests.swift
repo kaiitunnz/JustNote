@@ -62,6 +62,13 @@ final class JustNoteTests: XCTestCase {
         XCTAssertEqual(Note.title(from: "Plain title"), "Plain title")
     }
 
+    func testMarkdownParagraphGapHitTestUsesOpenLowerBound() {
+        XCTAssertFalse(MarkdownParagraphGapHitTest.contains(y: 40, lastLineMaxY: 40, fragmentMaxY: 52))
+        XCTAssertTrue(MarkdownParagraphGapHitTest.contains(y: 46, lastLineMaxY: 40, fragmentMaxY: 52))
+        XCTAssertTrue(MarkdownParagraphGapHitTest.contains(y: 52, lastLineMaxY: 40, fragmentMaxY: 52))
+        XCTAssertFalse(MarkdownParagraphGapHitTest.contains(y: 53, lastLineMaxY: 40, fragmentMaxY: 52))
+    }
+
     func testSelectAdjacentNoteWrapsAround() throws {
         let model = AppModel(store: try NoteStore(rootURL: rootURL))
         model.createNote()
