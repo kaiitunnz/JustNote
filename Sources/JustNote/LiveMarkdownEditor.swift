@@ -436,17 +436,14 @@ private final class MarkdownSemanticColorizerView: NSView {
         // viewport. Collect first, then apply: mutating .foregroundColor inside a
         // .foregroundColor enumeration is undefined, so read within the .font walk.
         var pending: [NSRange] = []
-        storage.enumerateAttribute(.font, in: range, options: []) { value, visibleRange, _ in
+        storage.enumerateAttribute(.font, in: range, options: []) { value, fontRange, _ in
             guard let font = value as? NSFont, font.pointSize > 1 else { return }
-            var location = visibleRange.location
-            let end = NSMaxRange(visibleRange)
+            var location = fontRange.location
+            let end = NSMaxRange(fontRange)
             while location < end {
                 var effective = NSRange(location: 0, length: 0)
-                let current = storage.attribute(.foregroundColor, at: location, longestEffectiveRange: &effective, in: visibleRange) as? NSColor
-                if current !== color {
-                    let span = NSIntersectionRange(effective, visibleRange)
-                    if span.length > 0 { pending.append(span) }
-                }
+                let current = storage.attribute(.foregroundColor, at: location, longestEffectiveRange: &effective, in: fontRange) as? NSColor
+                if current !== color { pending.append(effective) }
                 location = NSMaxRange(effective)
             }
         }
