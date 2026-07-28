@@ -430,9 +430,28 @@ private final class MarkdownSemanticColorizerView: NSView {
     }
 
     private func applyForegroundColor(_ color: NSColor, to range: NSRange, storage: NSTextStorage) {
+        // Only write spans whose color actually differs. Re-adding an identical
+        // color still marks the storage edited, and this runs on every caret
+        // move — a doc-wide no-op edit invalidates TextKit 2 layout and snaps the
+        // viewport. Collect first, then apply: mutating .foregroundColor inside a
+        // .foregroundColor enumeration is undefined, so read within the .font walk.
+        var pending: [NSRange] = []
         storage.enumerateAttribute(.font, in: range, options: []) { value, visibleRange, _ in
             guard let font = value as? NSFont, font.pointSize > 1 else { return }
-            storage.addAttribute(.foregroundColor, value: color, range: visibleRange)
+            var location = visibleRange.location
+            let end = NSMaxRange(visibleRange)
+            while location < end {
+                var effective = NSRange(location: 0, length: 0)
+                let current = storage.attribute(.foregroundColor, at: location, longestEffectiveRange: &effective, in: visibleRange) as? NSColor
+                if current !== color {
+                    let span = NSIntersectionRange(effective, visibleRange)
+                    if span.length > 0 { pending.append(span) }
+                }
+                location = NSMaxRange(effective)
+            }
+        }
+        for span in pending {
+            storage.addAttribute(.foregroundColor, value: color, range: span)
         }
     }
 
