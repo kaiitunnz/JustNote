@@ -1,24 +1,24 @@
 import XCTest
 import AppKit
-import MarkdownEngineCodeBlocks
+@testable import JustNote
 
-/// Guards the code-block highlighting contract JustNote's `LiveMarkdownEditor`
-/// now depends on: the injected `HighlighterSwiftBridge` (constructed with the
-/// same defaults JustNote uses) must supply a visible background fill and emit
-/// per-token foreground colors. Because HighlighterSwift is pinned exactly and
-/// the visual result can't be screenshotted in CI, this test is the regression
-/// signal if a future dependency bump silently breaks either behavior.
+/// Guards the code-block highlighting contract JustNote's live editor depends on.
+/// `CodeBlockSyntaxHighlighter` is the highlighter actually injected into the
+/// editor: it must supply a visible background fill, emit per-token colors for
+/// language-tagged fences, and — crucially — NOT auto-detect a language for a
+/// bare fence (which colors plain prose as if it were source). Because the
+/// visual result can't be screenshotted in CI, these are the regression signals
+/// if the pinned dependency or the wrapper's gating ever change.
 final class SyntaxHighlighterIntegrationTests: XCTestCase {
 
     func testBackgroundColorIsOpaqueVisibleTint() {
-        let highlighter = HighlighterSwiftBridge()
         // The default PlainTextSyntaxHighlighter returns alpha 0 (invisible);
         // the whole point of the swap is an actually-visible fill.
-        XCTAssertGreaterThan(highlighter.backgroundColor().alphaComponent, 0.5)
+        XCTAssertGreaterThan(CodeBlockSyntaxHighlighter().backgroundColor().alphaComponent, 0.5)
     }
 
-    func testHighlightEmitsTokenColorsForKnownLanguages() throws {
-        let highlighter = HighlighterSwiftBridge()
+    func testTaggedFenceEmitsTokenColors() throws {
+        let highlighter = CodeBlockSyntaxHighlighter()
         for (language, code) in [
             ("swift", "let greeting = \"hello\"\nfunc main() { print(greeting) }"),
             ("python", "def main():\n    x = 1\n    return x")
@@ -34,10 +34,13 @@ final class SyntaxHighlighterIntegrationTests: XCTestCase {
         }
     }
 
-    func testNoLanguageFenceDoesNotCrash() {
-        let highlighter = HighlighterSwiftBridge()
-        // Auto-detect path (no language). Result may be nil; must not throw/crash.
-        _ = highlighter.highlight(code: "plain text with no language", language: nil)
+    func testBareFenceIsNotAutoDetected() {
+        let highlighter = CodeBlockSyntaxHighlighter()
+        let prose = "just some prose in a fence, not code at all"
+        // No language hint → no highlighting, so prose isn't miscolored as source.
+        XCTAssertNil(highlighter.highlight(code: prose, language: nil))
+        XCTAssertNil(highlighter.highlight(code: prose, language: ""))
+        XCTAssertNil(highlighter.highlight(code: prose, language: "   "))
     }
 
     private func hasMultipleForegroundColors(_ string: NSAttributedString) -> Bool {

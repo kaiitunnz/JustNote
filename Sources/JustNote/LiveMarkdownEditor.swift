@@ -16,7 +16,7 @@ struct LiveMarkdownEditor: View {
     // appearance observer at init, and caches highlights internally. `configuration`
     // is recomputed on every SwiftUI update, so it must hand back this one instance
     // rather than construct a fresh highlighter each render.
-    private static let syntaxHighlighter = HighlighterSwiftBridge()
+    private static let syntaxHighlighter = CodeBlockSyntaxHighlighter()
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -95,6 +95,25 @@ struct LiveMarkdownEditor: View {
         configuration.textInsets = TextInsets(horizontal: 10, vertical: 10)
         configuration.overscroll = OverscrollPolicy(percent: 0, maxPoints: 0, minPoints: 0)
         return configuration
+    }
+}
+
+/// Wraps `HighlighterSwiftBridge` to only highlight fenced blocks that name a
+/// language. Given no language the bridge auto-detects one, which colors the
+/// plain prose in a bare ``` fence as if it were source — so gate that off and
+/// let such blocks render as plain monospace on the code background.
+final class CodeBlockSyntaxHighlighter: SyntaxHighlighter, @unchecked Sendable {
+    private let base = HighlighterSwiftBridge()
+
+    var appearanceDidChangeNotification: Notification.Name? { base.appearanceDidChangeNotification }
+
+    func codeFont(size: CGFloat) -> NSFont { base.codeFont(size: size) }
+
+    func backgroundColor() -> NSColor { base.backgroundColor() }
+
+    func highlight(code: String, language: String?) -> NSAttributedString? {
+        guard let language, !language.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        return base.highlight(code: code, language: language)
     }
 }
 
@@ -396,7 +415,7 @@ private final class MarkdownSemanticColorizerView: NSView {
         colorMatches(Self.strongExpression, color: MarkdownPalette.pink, text: text, storage: storage, requiredTraits: .bold)
         colorMatches(Self.emphasisExpression, color: MarkdownPalette.pink, text: text, storage: storage, requiredTraits: .italic)
         colorMatches(Self.underscoreEmphasisExpression, color: MarkdownPalette.pink, text: text, storage: storage, requiredTraits: .italic)
-        colorMatches(Self.inlineCodeExpression, color: MarkdownPalette.purple, text: text, storage: storage, requiresMonospace: true)
+        colorMatches(Self.inlineCodeExpression, color: MarkdownPalette.purple, text: text, storage: storage, requiresMonospace: true, clearsBackground: true)
     }
 
     private func colorHeadings(in text: NSString, storage: NSTextStorage) {
@@ -439,7 +458,8 @@ private final class MarkdownSemanticColorizerView: NSView {
         text: NSString,
         storage: NSTextStorage,
         requiredTraits: NSFontDescriptor.SymbolicTraits? = nil,
-        requiresMonospace: Bool = false
+        requiresMonospace: Bool = false,
+        clearsBackground: Bool = false
     ) {
         let range = NSRange(location: 0, length: text.length)
         expression.matches(in: text as String, range: range).forEach { match in
@@ -454,6 +474,27 @@ private final class MarkdownSemanticColorizerView: NSView {
                 !requiresMonospace || rangeHasMonospacedFont(contentRange, storage: storage)
             else { return }
             applyForegroundColor(color, to: contentRange, storage: storage)
+            // The engine fills inline `code` with the fenced-block background
+            // (a single shared color, no separate knob); that opaque box reads
+            // badly on inline spans, so strip it here. The hidden-marker guard
+            // above keeps this off fenced-block content, whose full-width fill
+            // depends on that background attribute staying put.
+            if clearsBackground {
+                clearBackground(in: contentRange, storage: storage)
+            }
+        }
+    }
+
+    private func clearBackground(in range: NSRange, storage: NSTextStorage) {
+        // Only strip where a background actually exists: removing a nonexistent
+        // attribute still marks the storage edited, and this runs on every caret
+        // move — a no-op edit invalidates TextKit 2 layout and snaps the viewport.
+        var spans: [NSRange] = []
+        storage.enumerateAttribute(.backgroundColor, in: range, options: []) { value, spanRange, _ in
+            if value != nil { spans.append(spanRange) }
+        }
+        for span in spans {
+            storage.removeAttribute(.backgroundColor, range: span)
         }
     }
 
