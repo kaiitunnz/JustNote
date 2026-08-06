@@ -13,6 +13,7 @@ struct MenuView: View {
     @State private var showingUninstallConfirmation = false
     @State private var draggingNoteIDs: Set<UUID> = []
     @State private var dropGap: DropGap?
+    @State private var dragEndTimer: Timer?
     @State private var splitDragStartWidth: Double?
     @State private var wrapIcon: String?
     @State private var wrapToken = 0
@@ -164,6 +165,7 @@ struct MenuView: View {
                         }
                         .onDrag {
                             draggingNoteIDs = model.actionTargetIDs(containing: note.id)
+                            watchForDragEnd()
                             return NSItemProvider(object: note.id.uuidString as NSString)
                         }
                         .onDrop(
@@ -474,6 +476,23 @@ struct MenuView: View {
         } else {
             model.selectOnly(note.id)
         }
+    }
+
+    /// SwiftUI has no drag-end callback, so a drag released outside any drop target
+    /// never clears the drag state. Poll the physical mouse button (up can't happen
+    /// mid-drag) and reset once it releases, unless a drop already did.
+    private func watchForDragEnd() {
+        dragEndTimer?.invalidate()
+        let dragging = $draggingNoteIDs
+        let gap = $dropGap
+        let timer = Timer(timeInterval: 0.1, repeats: true) { timer in
+            guard NSEvent.pressedMouseButtons & 0x1 == 0 else { return }
+            timer.invalidate()
+            dragging.wrappedValue = []
+            gap.wrappedValue = nil
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        dragEndTimer = timer
     }
 
     private func requestDeleteSelectedNotes() {

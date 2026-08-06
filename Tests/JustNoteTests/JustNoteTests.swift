@@ -475,8 +475,8 @@ final class JustNoteTests: XCTestCase {
 
     func testNotesWouldMoveDetectsNoOpPositions() throws {
         let model = AppModel(store: try NoteStore(rootURL: rootURL))
-        let (_, b, c) = try seedThreeUnpinned(model)
-        XCTAssertEqual(model.unpinnedNotes.map(\.id), [c, b, model.unpinnedNotes[2].id])
+        let (a, b, c) = try seedThreeUnpinned(model)
+        XCTAssertEqual(model.unpinnedNotes.map(\.id), [c, b, a])
 
         // c sits at display index 0; dropping it before itself is a no-op.
         XCTAssertFalse(model.notesWouldMove([c], toSection: false, toIndex: 0))
