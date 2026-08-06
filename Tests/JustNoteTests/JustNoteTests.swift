@@ -369,6 +369,139 @@ final class JustNoteTests: XCTestCase {
         XCTAssertEqual(reloaded.unpinnedNotes.map(\.id), [thirdID])
     }
 
+    func testDragPinsNoteAcrossSectionsAtRequestedIndex() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        let (a, b, c) = try seedThreeUnpinned(model)
+        XCTAssertEqual(model.unpinnedNotes.map(\.id), [c, b, a])
+        let before = try XCTUnwrap(model.notes.first { $0.id == a }).updatedAt
+
+        model.moveNote(a, toSection: true, toIndex: 0)
+
+        XCTAssertEqual(model.pinnedNotes.map(\.id), [a])
+        XCTAssertEqual(model.unpinnedNotes.map(\.id), [c, b])
+        XCTAssertTrue(try XCTUnwrap(model.notes.first { $0.id == a }).pinned)
+        XCTAssertGreaterThan(try XCTUnwrap(model.notes.first { $0.id == a }).updatedAt, before)
+    }
+
+    func testDragUnpinsNoteAcrossSections() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        let (a, b, c) = try seedThreeUnpinned(model)
+        model.setPinned([a, b], pinned: true)
+
+        model.moveNote(a, toSection: false, toIndex: 0)
+
+        XCTAssertFalse(try XCTUnwrap(model.notes.first { $0.id == a }).pinned)
+        XCTAssertEqual(model.pinnedNotes.map(\.id), [b])
+        XCTAssertEqual(model.unpinnedNotes.map(\.id), [a, c])
+    }
+
+    func testCrossSectionDropAtEndLandsLast() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        let (a, b, c) = try seedThreeUnpinned(model)
+        model.setPinned([b, c], pinned: true)
+        XCTAssertEqual(model.pinnedNotes.map(\.id), [c, b])
+
+        model.moveNote(a, toSection: true, toIndex: model.pinnedNotes.count)
+
+        XCTAssertEqual(model.pinnedNotes.map(\.id), [c, b, a])
+        XCTAssertTrue(model.unpinnedNotes.isEmpty)
+    }
+
+    func testMultiSelectDragSpanningBothSectionsMovesTogether() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        let (a, b, c) = try seedThreeUnpinned(model)
+        model.setPinned([a], pinned: true)
+        XCTAssertEqual(model.pinnedNotes.map(\.id), [a])
+        XCTAssertEqual(model.unpinnedNotes.map(\.id), [c, b])
+
+        model.moveNotes([a, c], toSection: false, toIndex: 0)
+
+        XCTAssertTrue(model.pinnedNotes.isEmpty)
+        XCTAssertEqual(model.unpinnedNotes.map(\.id), [a, c, b])
+        XCTAssertFalse(try XCTUnwrap(model.notes.first { $0.id == a }).pinned)
+        XCTAssertFalse(try XCTUnwrap(model.notes.first { $0.id == c }).pinned)
+    }
+
+    func testCrossSectionMoveBumpsOnlyFlippedNotes() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        let (a, _, c) = try seedThreeUnpinned(model)
+        model.setPinned([a], pinned: true)
+        let aBefore = try XCTUnwrap(model.notes.first { $0.id == a }).updatedAt
+        let cBefore = try XCTUnwrap(model.notes.first { $0.id == c }).updatedAt
+
+        model.moveNotes([a, c], toSection: true, toIndex: 0)
+
+        XCTAssertEqual(try XCTUnwrap(model.notes.first { $0.id == a }).updatedAt, aBefore)
+        XCTAssertGreaterThan(try XCTUnwrap(model.notes.first { $0.id == c }).updatedAt, cBefore)
+    }
+
+    func testMoveToSectionClampsOutOfRangeIndex() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        let (a, b, c) = try seedThreeUnpinned(model)
+        XCTAssertEqual(model.unpinnedNotes.map(\.id), [c, b, a])
+
+        model.moveNote(c, toSection: false, toIndex: .max)
+        XCTAssertEqual(model.unpinnedNotes.map(\.id), [b, a, c])
+
+        model.moveNote(c, toSection: false, toIndex: -5)
+        XCTAssertEqual(model.unpinnedNotes.map(\.id), [c, b, a])
+    }
+
+    func testSameSectionReorderViaToSectionLeavesTimestampsUnchanged() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        let (a, b, c) = try seedThreeUnpinned(model)
+        let before = Dictionary(uniqueKeysWithValues: model.notes.map { ($0.id, $0.updatedAt) })
+
+        model.moveNote(c, toSection: false, toIndex: 2)
+
+        XCTAssertEqual(model.unpinnedNotes.map(\.id), [b, a, c])
+        for id in [a, b, c] {
+            XCTAssertEqual(try XCTUnwrap(model.notes.first { $0.id == id }).updatedAt, before[id])
+        }
+    }
+
+    func testCrossSectionMovePersistsAcrossReload() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        let (a, b, c) = try seedThreeUnpinned(model)
+        model.moveNote(a, toSection: true, toIndex: 0)
+        model.moveNote(b, toSection: true, toIndex: 1)
+        XCTAssertEqual(model.pinnedNotes.map(\.id), [a, b])
+        XCTAssertEqual(model.unpinnedNotes.map(\.id), [c])
+
+        let reloaded = AppModel(store: try NoteStore(rootURL: rootURL))
+        XCTAssertEqual(reloaded.pinnedNotes.map(\.id), [a, b])
+        XCTAssertEqual(reloaded.unpinnedNotes.map(\.id), [c])
+    }
+
+    func testNotesWouldMoveDetectsNoOpPositions() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        let (a, b, c) = try seedThreeUnpinned(model)
+        XCTAssertEqual(model.unpinnedNotes.map(\.id), [c, b, a])
+
+        // c sits at display index 0; dropping it before itself is a no-op.
+        XCTAssertFalse(model.notesWouldMove([c], toSection: false, toIndex: 0))
+        // Moving c down past b changes the order.
+        XCTAssertTrue(model.notesWouldMove([c], toSection: false, toIndex: 1))
+        // Crossing into the pinned section always changes (pin flips) even if the id order is unchanged.
+        XCTAssertTrue(model.notesWouldMove([c], toSection: true, toIndex: 0))
+        // b sits at index 1; dropping it in either flanking gap is a no-op.
+        XCTAssertFalse(model.notesWouldMove([b], toSection: false, toIndex: 1))
+    }
+
+    /// Seeds three unpinned notes with bodies A/B/C; returns their ids.
+    /// Newest-first insertion means the resulting unpinned order is [c, b, a].
+    private func seedThreeUnpinned(_ model: AppModel) throws -> (a: UUID, b: UUID, c: UUID) {
+        let a = try XCTUnwrap(model.selectedNoteID)
+        model.updateSelectedBody("A")
+        model.createNote()
+        let b = try XCTUnwrap(model.selectedNoteID)
+        model.updateSelectedBody("B")
+        model.createNote()
+        let c = try XCTUnwrap(model.selectedNoteID)
+        model.updateSelectedBody("C")
+        return (a, b, c)
+    }
+
     func testDeletingSpecificNonSelectedNoteKeepsCurrentSelection() throws {
         let model = AppModel(store: try NoteStore(rootURL: rootURL))
         let firstID = try XCTUnwrap(model.selectedNoteID)
