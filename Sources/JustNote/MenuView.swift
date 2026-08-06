@@ -592,9 +592,9 @@ struct MenuView: View {
         nonmutating set { editorModeRaw = newValue.rawValue }
     }
 
-    // Clamp on read too, so a tampered/out-of-range persisted value never reaches the editors.
+    // Sanitize on read too, so a persisted value below the correctness floor never reaches the editors.
     private var fontSize: CGFloat {
-        EditorFontSize.clamp(CGFloat(editorFontSize))
+        EditorFontSize.sanitized(CGFloat(editorFontSize))
     }
 
     private var splitDrag: some Gesture {

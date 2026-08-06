@@ -108,28 +108,45 @@ enum EditorFontAction: String, CaseIterable {
 }
 
 /// Editor font size, persisted under `key` and observed by `MenuView`'s `@AppStorage`.
-/// The stepping/clamping logic is pure so it can be unit-tested without a running app.
+/// The stepping logic is pure so it can be unit-tested without a running app.
+///
+/// Stepping follows a discrete type ramp: 1 pt granularity at reading sizes, coarsening to
+/// 4 pt for display sizes, so a press feels proportional across the range and off-ramp values
+/// snap to the nearest stop in the direction of travel. The size is not capped — beyond the top
+/// stop it keeps growing by `stepAboveRamp`, and below the bottom stop it shrinks by
+/// `stepBelowRamp`. The only bound is `minSize`, a correctness floor rather than a style limit.
 enum EditorFontSize {
     static let key = "editorFontSize"
     static let defaultSize: CGFloat = 13
-    static let minSize: CGFloat = 9
-    static let maxSize: CGFloat = 32
-    static let step: CGFloat = 1
+    static let ramp: [CGFloat] = [9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 24, 28, 32]
+    static let stepBelowRamp: CGFloat = 1
+    static let stepAboveRamp: CGFloat = 4
 
-    static func clamp(_ value: CGFloat) -> CGFloat {
-        min(max(value, minSize), maxSize)
+    // Not a stylistic minimum: the live-Markdown colorizer treats a glyph whose font pointSize is
+    // <= 1 as a hidden syntax marker, and a font size must be positive, so the editable base font
+    // must stay clear of that sentinel. Nothing caps the top.
+    static let minSize: CGFloat = 2
+
+    static func sanitized(_ value: CGFloat) -> CGFloat {
+        max(value, minSize)
     }
 
     static func increased(from value: CGFloat) -> CGFloat {
-        clamp(value + step)
+        guard let low = ramp.first, let high = ramp.last else { return sanitized(value + stepBelowRamp) }
+        if value < low { return min(sanitized(value + stepBelowRamp), low) }
+        if value >= high { return value + stepAboveRamp }
+        return ramp.first { $0 > value } ?? high
     }
 
     static func decreased(from value: CGFloat) -> CGFloat {
-        clamp(value - step)
+        guard let low = ramp.first, let high = ramp.last else { return sanitized(value - stepBelowRamp) }
+        if value <= low { return sanitized(value - stepBelowRamp) }
+        if value > high { return max(high, value - stepAboveRamp) }
+        return ramp.last { $0 < value } ?? low
     }
 
     static func current(defaults: UserDefaults) -> CGFloat {
-        clamp((defaults.object(forKey: key) as? Double).map { CGFloat($0) } ?? defaultSize)
+        sanitized((defaults.object(forKey: key) as? Double).map { CGFloat($0) } ?? defaultSize)
     }
 }
 
