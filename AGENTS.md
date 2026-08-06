@@ -56,6 +56,11 @@ hidden. Rationale, each a real dead end tried and rejected:
   **titlebar strip** instead; header buttons sit below it and still receive clicks.
 - **`windowShouldZoom` returns `false`** — `.resizable` makes the panel zoomable, and a titlebar
   double-click would otherwise balloon it and persist that frame.
+- **Titlebar drags bypass every `NSWindow` frame setter.** The WindowServer moves a titled window
+  out-of-process during a titlebar drag; `setFrame`/`setFrameOrigin` overrides are never called. The
+  center-snapping is therefore driven from the `windowDidMove` delegate (re-anchor the origin there),
+  not an override — resize-snapping still uses `windowWillResize`, which *does* fire. Don't reroute
+  move-snapping through a frame-setter override; it's a dead end.
 - **Frame persistence** is `setFrameAutosaveName` (auto-saves on move/resize) + `setFrameUsingName`
   restored on first summon; off-screen frames recenter.
 - **Dismissal** is standard window behavior: the toggle shortcut, Escape (a local `keyDown` monitor,
