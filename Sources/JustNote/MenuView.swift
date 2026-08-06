@@ -721,11 +721,20 @@ private struct DropGap: Equatable {
 
 private struct InsertionLine: View {
     var body: some View {
-        Capsule()
-            .fill(Theme.accent)
-            .frame(height: 2.5)
-            .padding(.horizontal, 2)
-            .allowsHitTesting(false)
+        HStack(spacing: 0) {
+            Circle()
+                .fill(Theme.accent)
+                .frame(width: 6, height: 6)
+            Capsule()
+                .fill(Theme.accent)
+                .frame(height: 2)
+        }
+        .padding(.horizontal, 5)
+        .shadow(color: Theme.accent.opacity(0.4), radius: 2.5)
+        // The overlay's top edge sits on the gap midline; center the 6pt
+        // indicator on it so the line reads as "between" the two cards.
+        .offset(y: -3)
+        .allowsHitTesting(false)
     }
 }
 
@@ -801,7 +810,9 @@ private struct NoteDropDelegate: DropDelegate {
         // Ignore stray enter/update events after a drop resets the drag (the
         // commit reorders rows under the cursor); otherwise the line lingers.
         guard !draggingNoteIDs.isEmpty else { return }
-        if dropGap != gap { dropGap = gap }
+        // Hide the line at positions where the selection is already placed.
+        let g = model.notesWouldMove(draggingNoteIDs, toSection: pinned, toIndex: toIndex(for: draggingNoteIDs)) ? gap : nil
+        if dropGap != g { dropGap = g }
     }
 
     private func reset() {
@@ -809,11 +820,14 @@ private struct NoteDropDelegate: DropDelegate {
         draggingNoteIDs = []
     }
 
-    /// Translates the displayed gap into a target-excluded section index and commits the move.
-    private func commit(_ noteIDs: Set<UUID>) {
+    /// Translates the displayed gap into the target-excluded section index `moveNotes` expects.
+    private func toIndex(for noteIDs: Set<UUID>) -> Int {
         let section = pinned ? model.pinnedNotes : model.unpinnedNotes
-        let toIndex = section.prefix(gapIndex).filter { !noteIDs.contains($0.id) }.count
-        model.moveNotes(noteIDs, toSection: pinned, toIndex: toIndex)
+        return section.prefix(gapIndex).filter { !noteIDs.contains($0.id) }.count
+    }
+
+    private func commit(_ noteIDs: Set<UUID>) {
+        model.moveNotes(noteIDs, toSection: pinned, toIndex: toIndex(for: noteIDs))
     }
 }
 

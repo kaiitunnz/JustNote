@@ -473,6 +473,21 @@ final class JustNoteTests: XCTestCase {
         XCTAssertEqual(reloaded.unpinnedNotes.map(\.id), [c])
     }
 
+    func testNotesWouldMoveDetectsNoOpPositions() throws {
+        let model = AppModel(store: try NoteStore(rootURL: rootURL))
+        let (_, b, c) = try seedThreeUnpinned(model)
+        XCTAssertEqual(model.unpinnedNotes.map(\.id), [c, b, model.unpinnedNotes[2].id])
+
+        // c sits at display index 0; dropping it before itself is a no-op.
+        XCTAssertFalse(model.notesWouldMove([c], toSection: false, toIndex: 0))
+        // Moving c down past b changes the order.
+        XCTAssertTrue(model.notesWouldMove([c], toSection: false, toIndex: 1))
+        // Crossing into the pinned section always changes (pin flips) even if the id order is unchanged.
+        XCTAssertTrue(model.notesWouldMove([c], toSection: true, toIndex: 0))
+        // b sits at index 1; dropping it in either flanking gap is a no-op.
+        XCTAssertFalse(model.notesWouldMove([b], toSection: false, toIndex: 1))
+    }
+
     /// Seeds three unpinned notes with bodies A/B/C; returns their ids.
     /// Newest-first insertion means the resulting unpinned order is [c, b, a].
     private func seedThreeUnpinned(_ model: AppModel) throws -> (a: UUID, b: UUID, c: UUID) {
