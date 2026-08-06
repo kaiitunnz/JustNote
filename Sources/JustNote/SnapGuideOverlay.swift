@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 /// A transparent, click-through overlay that draws center alignment guides while the panel is being
 /// dragged. It lives in its own borderless window so updating it never moves — or fights — the panel
@@ -36,7 +37,10 @@ final class SnapGuideOverlay {
             return
         }
         if window.frame != visibleFrame {
+            // Moving to a differently-sized screen shifts the center, so repaint even if the shown
+            // axes are unchanged.
             window.setFrame(visibleFrame, display: false)
+            guideView.needsDisplay = true
         }
         guideView.apply(showVertical: showVertical, showHorizontal: showHorizontal)
         if !window.isVisible {
@@ -56,9 +60,6 @@ private final class GuideView: NSView {
     private var showVertical = false
     private var showHorizontal = false
 
-    override var isFlipped: Bool { false }
-    override var isOpaque: Bool { false }
-
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
@@ -77,7 +78,7 @@ private final class GuideView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard showVertical || showHorizontal else { return }
 
-        let accent = NSColor(srgbRed: 0.52, green: 0.68, blue: 0.94, alpha: 1) // Theme.accent
+        let accent = NSColor(Theme.accent)
         NSGraphicsContext.saveGraphicsState()
         defer { NSGraphicsContext.restoreGraphicsState() }
 
