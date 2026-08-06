@@ -335,12 +335,23 @@ extension PanelController: NSWindowDelegate {
 
     /// Magnetically snap each dimension to the default panel size during a live resize. Returning the
     /// snapped size keeps the dragged edge anchored while the size sticks at the default within the
-    /// threshold and releases once pulled past it.
+    /// threshold and releases once pulled past it. Only the dimension the drag actually changes is
+    /// eligible — dragging one edge must not tug the perpendicular dimension to the default (and fire
+    /// its haptic) when it happens to already sit near it.
     func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
-        let result = PanelSnap.snapSize(
+        let current = sender.frame.size
+        var result = PanelSnap.snapSize(
             frameSize,
             to: NSSize(width: Theme.panelWidth, height: Theme.panelHeight)
         )
+        if frameSize.width == current.width {
+            result.size.width = frameSize.width
+            result.snappedWidth = false
+        }
+        if frameSize.height == current.height {
+            result.size.height = frameSize.height
+            result.snappedHeight = false
+        }
         if (result.snappedWidth && !snappedWidth) || (result.snappedHeight && !snappedHeight) {
             PanelSnap.performAlignmentHaptic()
         }
@@ -358,8 +369,16 @@ extension PanelController: NSWindowDelegate {
     /// driven by the WindowServer and bypass every `NSWindow` frame setter, so the only place to
     /// intervene is after the fact: `windowDidMove` fires on each drag step, and re-anchoring the
     /// origin here holds the panel at center while the cursor stays within the threshold. Gate on a
-    /// physically-held left button so programmatic moves (summon positioning) pass through untouched,
-    /// and skip edge resizes, which move the origin but belong to `windowWillResize`.
+    /// physically-held left button so programmatic moves (summon positioning, launch frame restore)
+    /// pass through untouched, and skip edge resizes, which move the origin but belong to
+    /// `windowWillResize`.
+    ///
+    /// Known limitations, both accepted: the button gate is the one signal that reliably excludes
+    /// every programmatic frame change, but it reads `0` under the system three-finger-drag / drag-lock
+    /// accessibility setting, so center-snapping is inert for those users. And there is no drag-end
+    /// delegate for a move (unlike `windowDidEndLiveResize`), so `snappedX/Y` aren't cleared on
+    /// mouse-up; a drag that begins already centered may skip the engage haptic once — it self-heals as
+    /// soon as the cursor leaves the zone.
     func windowDidMove(_ notification: Notification) {
         guard !isSnappingMove, !panel.inLiveResize else { return }
         guard NSEvent.pressedMouseButtons & 0x1 != 0 else {
