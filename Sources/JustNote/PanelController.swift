@@ -61,6 +61,7 @@ final class FloatingPanel: NSPanel {
 final class PanelController: NSObject {
     private let panel: FloatingPanel
     private var escapeMonitor: Any?
+    private var dragSnapMonitors: [Any] = []
     private var shownAt: Date?
     private var dismissSuspended = false
     private var hasPositioned = false
@@ -70,13 +71,9 @@ final class PanelController: NSObject {
     private var snappedWidth = false
     private var snappedHeight = false
 
-    /// Per-axis move snap state (same one-shot-haptic purpose as the resize flags).
-    private var snappedX = false
-    private var snappedY = false
-
-    /// Reentrancy guard: repositioning the panel from within `windowDidMove` posts another move
-    /// notification, which must not re-enter the snap logic.
-    private var isSnappingMove = false
+    /// True once a titlebar drag has actually moved the panel during the current left-button press —
+    /// the signal that a mouse-up should evaluate the center snap. A plain click never sets it.
+    private var panelMovedDuringDrag = false
 
     /// True when a saved frame was restored at launch — first summon then keeps it instead of
     /// re-centering.
@@ -157,6 +154,7 @@ final class PanelController: NSObject {
         let focusedScreen = NSScreen.main
         positionForSummon(focusedScreen: focusedScreen)
         installEscapeMonitor()
+        installDragSnapMonitors()
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         shownAt = Date()
@@ -302,6 +300,53 @@ final class PanelController: NSObject {
         if let escapeMonitor { NSEvent.removeMonitor(escapeMonitor) }
         escapeMonitor = nil
     }
+
+    /// Center-snapping is applied on drag *release*, not live: a titlebar drag is driven by the
+    /// WindowServer, so re-anchoring the panel to center mid-drag fights the server and flickers.
+    /// These monitors track the button press instead — a left-down starts a fresh gesture, and a
+    /// left-up settles the panel to center if the drag left it within the threshold. Both local and
+    /// global variants are installed so a drag that ends over another window's space is still caught.
+    private func installDragSnapMonitors() {
+        guard dragSnapMonitors.isEmpty else { return }
+        let onDown: (NSEvent) -> Void = { [weak self] _ in self?.panelMovedDuringDrag = false }
+        let onUp: (NSEvent) -> Void = { [weak self] _ in self?.snapPanelToCenterAfterDrag() }
+        let add: (NSEvent.EventTypeMask, @escaping (NSEvent) -> Void) -> Void = { [weak self] mask, handler in
+            guard let self else { return }
+            if let local = NSEvent.addLocalMonitorForEvents(matching: mask, handler: { handler($0); return $0 }) {
+                self.dragSnapMonitors.append(local)
+            }
+            if let global = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: handler) {
+                self.dragSnapMonitors.append(global)
+            }
+        }
+        add(.leftMouseDown, onDown)
+        add(.leftMouseUp, onUp)
+    }
+
+    private func removeDragSnapMonitors() {
+        dragSnapMonitors.forEach { NSEvent.removeMonitor($0) }
+        dragSnapMonitors.removeAll()
+        panelMovedDuringDrag = false
+    }
+
+    /// On the mouse-up ending a titlebar drag, glide each axis that landed within the threshold to the
+    /// screen center. Animated (never blocking the drag), so there is no mid-drag interference; the
+    /// per-axis result and alignment haptic match the resize snap.
+    private func snapPanelToCenterAfterDrag() {
+        guard panelMovedDuringDrag else { return }
+        panelMovedDuringDrag = false
+        guard panel.isVisible, !panel.inLiveResize else { return }
+        guard let visible = (panel.screen ?? NSScreen.main)?.visibleFrame else { return }
+
+        let result = PanelSnap.snapOrigin(panel.frame.origin, windowSize: panel.frame.size, in: visible)
+        guard result.origin != panel.frame.origin else { return }
+
+        PanelSnap.performAlignmentHaptic()
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.12
+            panel.animator().setFrame(NSRect(origin: result.origin, size: panel.frame.size), display: true)
+        }
+    }
 }
 
 extension PanelController: NSWindowDelegate {
@@ -322,9 +367,10 @@ extension PanelController: NSWindowDelegate {
         }
     }
 
-    /// Single teardown point for the key monitor, robust to every close path.
+    /// Single teardown point for the event monitors, robust to every close path.
     func windowWillClose(_ notification: Notification) {
         removeEscapeMonitor()
+        removeDragSnapMonitors()
     }
 
     /// `.resizable` makes the panel zoomable, so a double-click on the transparent titlebar (which
@@ -365,40 +411,12 @@ extension PanelController: NSWindowDelegate {
         snappedHeight = false
     }
 
-    /// Magnetically snap each axis to the screen center during a titlebar drag. Titlebar drags are
-    /// driven by the WindowServer and bypass every `NSWindow` frame setter, so the only place to
-    /// intervene is after the fact: `windowDidMove` fires on each drag step, and re-anchoring the
-    /// origin here holds the panel at center while the cursor stays within the threshold. Gate on a
-    /// physically-held left button so programmatic moves (summon positioning, launch frame restore)
-    /// pass through untouched, and skip edge resizes, which move the origin but belong to
-    /// `windowWillResize`.
-    ///
-    /// Known limitations, both accepted: the button gate is the one signal that reliably excludes
-    /// every programmatic frame change, but it reads `0` under the system three-finger-drag / drag-lock
-    /// accessibility setting, so center-snapping is inert for those users. And there is no drag-end
-    /// delegate for a move (unlike `windowDidEndLiveResize`), so `snappedX/Y` aren't cleared on
-    /// mouse-up; a drag that begins already centered may skip the engage haptic once — it self-heals as
-    /// soon as the cursor leaves the zone.
+    /// Record that a titlebar drag actually moved the panel, so the left-up monitor knows to evaluate
+    /// the center snap. Gated on a physically-held left button so programmatic moves (summon
+    /// positioning, launch frame restore, the release animation itself) don't arm it, and on
+    /// `!inLiveResize` so an edge resize — which shifts the origin — isn't mistaken for a move.
     func windowDidMove(_ notification: Notification) {
-        guard !isSnappingMove, !panel.inLiveResize else { return }
-        guard NSEvent.pressedMouseButtons & 0x1 != 0 else {
-            snappedX = false
-            snappedY = false
-            return
-        }
-        guard let visible = (panel.screen ?? NSScreen.main)?.visibleFrame else { return }
-
-        let result = PanelSnap.snapOrigin(panel.frame.origin, windowSize: panel.frame.size, in: visible)
-        if (result.snappedX && !snappedX) || (result.snappedY && !snappedY) {
-            PanelSnap.performAlignmentHaptic()
-        }
-        snappedX = result.snappedX
-        snappedY = result.snappedY
-
-        if result.origin != panel.frame.origin {
-            isSnappingMove = true
-            panel.setFrameOrigin(result.origin)
-            isSnappingMove = false
-        }
+        guard !panel.inLiveResize, NSEvent.pressedMouseButtons & 0x1 != 0 else { return }
+        panelMovedDuringDrag = true
     }
 }

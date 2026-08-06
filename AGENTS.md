@@ -57,10 +57,13 @@ hidden. Rationale, each a real dead end tried and rejected:
 - **`windowShouldZoom` returns `false`** — `.resizable` makes the panel zoomable, and a titlebar
   double-click would otherwise balloon it and persist that frame.
 - **Titlebar drags bypass every `NSWindow` frame setter.** The WindowServer moves a titled window
-  out-of-process during a titlebar drag; `setFrame`/`setFrameOrigin` overrides are never called. The
-  center-snapping is therefore driven from the `windowDidMove` delegate (re-anchor the origin there),
-  not an override — resize-snapping still uses `windowWillResize`, which *does* fire. Don't reroute
-  move-snapping through a frame-setter override; it's a dead end.
+  out-of-process during a titlebar drag; `setFrame`/`setFrameOrigin` overrides are never called, and
+  re-anchoring the origin live (from `windowDidMove`) to snap toward center *fights* the server and
+  **flickers**. So center-snapping is applied on **drag release**: a left-mouse-up monitor glides the
+  panel to center if the drag left it within threshold, while `windowDidMove` only records that a drag
+  occurred. Resize-snapping is different — it *is* live, via `windowWillResize`, which AppKit applies
+  cleanly with no server fight. Don't reroute move-snapping through a frame-setter override or a live
+  re-anchor; both are dead ends.
 - **Frame persistence** is `setFrameAutosaveName` (auto-saves on move/resize) + `setFrameUsingName`
   restored on first summon; off-screen frames recenter.
 - **Dismissal** is standard window behavior: the toggle shortcut, Escape (a local `keyDown` monitor,
