@@ -639,7 +639,7 @@ private final class MarkdownInteractionMonitorView: NSView {
     }
 }
 
-private extension NSView {
+extension NSView {
     var textViews: [NSTextView] {
         let ownTextView = (self as? NSTextView).map { [$0] } ?? []
         return ownTextView + subviews.flatMap(\.textViews)

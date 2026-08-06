@@ -83,13 +83,16 @@ enum EditorFormattingAction: String, CaseIterable {
         default: nil
         }
     }
+}
 
-    var appKitModifierFlags: NSEvent.ModifierFlags {
-        switch self {
-        case .bold, .italic: .command
-        case .strikethrough, .unorderedList, .orderedList: [.command, .shift]
-        default: []
-        }
+extension EventModifiers {
+    var appKitFlags: NSEvent.ModifierFlags {
+        var flags: NSEvent.ModifierFlags = []
+        if contains(.command) { flags.insert(.command) }
+        if contains(.shift) { flags.insert(.shift) }
+        if contains(.option) { flags.insert(.option) }
+        if contains(.control) { flags.insert(.control) }
+        return flags
     }
 }
 
@@ -169,15 +172,10 @@ struct EditorTextViewRegistration: NSViewRepresentable {
             DispatchQueue.main.async { [weak self] in
                 guard let self, let rootView = self.window?.contentView else { return }
                 let normalizedText = Self.normalized(self.documentText)
-                if let textView = Self.textViews(in: rootView).first(where: { Self.normalized($0.string) == normalizedText }) {
+                if let textView = rootView.textViews.first(where: { Self.normalized($0.string) == normalizedText }) {
                     EditorCommandRouter.shared.register(textView)
                 }
             }
-        }
-
-        private static func textViews(in view: NSView) -> [NSTextView] {
-            let own = (view as? NSTextView).map { [$0] } ?? []
-            return own + view.subviews.flatMap(textViews(in:))
         }
 
         private static func normalized(_ text: String) -> String {
@@ -209,8 +207,8 @@ enum EditorContextMenuBuilder {
             item.identifier = NSUserInterfaceItemIdentifier("JustNote.editor-formatting")
             item.target = mode == .markdown ? markdownTarget : plainTextTarget
             item.representedObject = action.rawValue
-            if action.keyEquivalent != nil {
-                item.keyEquivalentModifierMask = action.appKitModifierFlags
+            if let (_, modifiers) = action.keyEquivalent {
+                item.keyEquivalentModifierMask = modifiers.appKitFlags
             }
             menu.addItem(item)
         }
@@ -286,7 +284,8 @@ private enum PlainTextFormatting {
         let nsText = textView.string as NSString
         let selected = range.length > 0 ? nsText.substring(with: range) : ""
         let value = "[\(selected)]()"
-        let urlLocation = range.location + selected.count + 2
+        // Caret lands between the parentheses: "[" + selected + "]" + "(" = range.length + 3.
+        let urlLocation = range.location + range.length + 3
         replace(textView, range: range, value: value, selection: NSRange(location: urlLocation, length: 0))
     }
 
@@ -294,15 +293,20 @@ private enum PlainTextFormatting {
         let range = (textView.string as NSString).lineRange(for: textView.selectedRange())
         let line = (textView.string as NSString).substring(with: range)
         let content = line.replacingOccurrences(of: "^#+\\s*", with: "", options: .regularExpression)
-        replace(textView, range: range, value: prefix + content, selection: NSRange(location: range.location + prefix.count, length: max(content.count - (content.hasSuffix("\n") ? 1 : 0), 0)))
+        let contentLength = (content as NSString).length - (content.hasSuffix("\n") ? 1 : 0)
+        let selection = NSRange(location: range.location + (prefix as NSString).length, length: max(contentLength, 0))
+        replace(textView, range: range, value: prefix + content, selection: selection)
     }
 
     private static func toggleLinePrefix(_ textView: NSTextView, prefix: String) {
         let range = (textView.string as NSString).lineRange(for: textView.selectedRange())
         let line = (textView.string as NSString).substring(with: range)
-        let value = line.hasPrefix(prefix) ? String(line.dropFirst(prefix.count)) : prefix + line
-        let offset = line.hasPrefix(prefix) ? 0 : prefix.count
-        replace(textView, range: range, value: value, selection: NSRange(location: range.location + offset, length: max(value.count - offset - (value.hasSuffix("\n") ? 1 : 0), 0)))
+        let hasPrefix = line.hasPrefix(prefix)
+        let value = hasPrefix ? String(line.dropFirst(prefix.count)) : prefix + line
+        let offset = hasPrefix ? 0 : (prefix as NSString).length
+        let contentLength = (value as NSString).length - offset - (value.hasSuffix("\n") ? 1 : 0)
+        let selection = NSRange(location: range.location + offset, length: max(contentLength, 0))
+        replace(textView, range: range, value: value, selection: selection)
     }
 
     private static func wordRange(at location: Int, in text: NSString) -> NSRange? {

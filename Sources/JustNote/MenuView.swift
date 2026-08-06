@@ -6,7 +6,8 @@ struct MenuView: View {
     @ObservedObject var model: AppModel
     @AppStorage("sidebarWidth") private var sidebarWidth = Double(Theme.sidebarWidth)
     @AppStorage("wrapLines") private var wrapLines = true
-    @AppStorage("editorMode") private var editorModeRaw = EditorModePreference.initialValue(defaults: .standard)
+    // Placeholder default; init runs the real preference migration and overwrites it.
+    @AppStorage("editorMode") private var editorModeRaw = EditorMode.markdown.rawValue
     @AppStorage("sidebarCollapsed") private var sidebarCollapsed = false
     @State private var showingUninstallConfirmation = false
     @State private var draggingNoteID: UUID?
