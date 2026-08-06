@@ -798,6 +798,9 @@ private struct NoteDropDelegate: DropDelegate {
     private var gap: DropGap { DropGap(pinned: pinned, index: gapIndex) }
 
     private func showGap() {
+        // Ignore stray enter/update events after a drop resets the drag (the
+        // commit reorders rows under the cursor); otherwise the line lingers.
+        guard !draggingNoteIDs.isEmpty else { return }
         if dropGap != gap { dropGap = gap }
     }
 
