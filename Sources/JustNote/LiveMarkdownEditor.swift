@@ -1,5 +1,6 @@
 import AppKit
 import MarkdownEngine
+import MarkdownEngineCodeBlocks
 import SwiftUI
 
 struct LiveMarkdownEditor: View {
@@ -10,6 +11,12 @@ struct LiveMarkdownEditor: View {
     @State private var codeBlocks: [CodeBlockSelection] = []
     @State private var copiedCodeBlockID: Int?
     @State private var hoveredCodeBlockID: Int?
+
+    // App-lifetime instance: the bridge spins up a JavaScriptCore context and an
+    // appearance observer at init, and caches highlights internally. `configuration`
+    // is recomputed on every SwiftUI update, so it must hand back this one instance
+    // rather than construct a fresh highlighter each render.
+    private static let syntaxHighlighter = HighlighterSwiftBridge()
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -72,6 +79,7 @@ struct LiveMarkdownEditor: View {
             applyCodeBlockRequest: EditorFormattingAction.codeBlock.notificationName,
             applyHorizontalRuleRequest: EditorFormattingAction.horizontalRule.notificationName
         )
+        services.syntaxHighlighter = Self.syntaxHighlighter
         configuration.services = services
         configuration.theme.headingMarker = MarkdownPalette.blue
         configuration.theme.link = MarkdownPalette.blue

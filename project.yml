@@ -34,6 +34,13 @@ packages:
     # Exact-version pin (the .xcodeproj — and its Package.resolved — is git-ignored, so a
     # range would let checkouts drift). Verified to compile against the macOS 27 SDK.
     exactVersion: 1.9.4
+  HighlighterSwift:
+    url: https://github.com/smittytone/HighlighterSwift
+    # Transitive dependency of MarkdownEngine's MarkdownEngineCodeBlocks product, which
+    # MarkdownEngine pins only as a `from: 3.0.0` range. Pin it exactly here because the
+    # .xcodeproj (and its Package.resolved) is git-ignored, so a range would let checkouts
+    # drift. Verified to compile against the macOS 27 SDK.
+    exactVersion: 3.1.0
 
 schemes:
   JustNote:
@@ -55,6 +62,8 @@ targets:
         type: file
     dependencies:
       - package: MarkdownEngine
+      - package: MarkdownEngine
+        product: MarkdownEngineCodeBlocks
       - package: KeyboardShortcuts
     settings:
       base:
@@ -73,6 +82,8 @@ targets:
       - Tests/JustNoteTests
     dependencies:
       - target: JustNote
+      - package: MarkdownEngine
+        product: MarkdownEngineCodeBlocks
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.justnote.app.tests
