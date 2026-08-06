@@ -12,6 +12,7 @@ struct MenuView: View {
     @AppStorage("sidebarCollapsed") private var sidebarCollapsed = false
     @State private var showingUninstallConfirmation = false
     @State private var draggingNoteIDs: Set<UUID> = []
+    @State private var dropGap: DropGap?
     @State private var splitDragStartWidth: Double?
     @State private var wrapIcon: String?
     @State private var wrapToken = 0
@@ -125,7 +126,7 @@ struct MenuView: View {
         }
         .padding(12)
         .collapsesSelectionOnTap(model)
-        .onDrop(of: [.text], delegate: SidebarDropDelegate(draggingNoteIDs: $draggingNoteIDs))
+        .onDrop(of: [.text], delegate: SidebarDropDelegate(draggingNoteIDs: $draggingNoteIDs, dropGap: $dropGap))
         .contextMenu {
             sidebarContextMenu
         }
@@ -141,40 +142,57 @@ struct MenuView: View {
                     .font(Theme.rounded(10, weight: .semibold))
                     .foregroundStyle(.tertiary)
                     .padding(.horizontal, 2)
-                ForEach(Array(notes.enumerated()), id: \.element.id) { index, note in
-                    NoteRow(
-                        note: note,
-                        selected: model.selectedNoteIDs.contains(note.id),
-                        primary: note.id == model.selectedNoteID
+                // spacing 0 + per-row vertical padding keeps the drop targets
+                // contiguous so the insertion line never blanks in a dead gap.
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(notes.enumerated()), id: \.element.id) { index, note in
+                        NoteRow(
+                            note: note,
+                            selected: model.selectedNoteIDs.contains(note.id),
+                            primary: note.id == model.selectedNoteID
+                        )
+                        .padding(.vertical, 3)
+                        .contentShape(Rectangle())
+                        .overlay(alignment: .top) {
+                            if dropGap == DropGap(pinned: pinned, index: index) {
+                                InsertionLine()
+                            }
+                        }
+                        .onTapGesture { select(note) }
+                        .contextMenu {
+                            noteContextMenu(note, pinned: pinned, targetIDs: model.actionTargetIDs(containing: note.id))
+                        }
+                        .onDrag {
+                            draggingNoteIDs = model.actionTargetIDs(containing: note.id)
+                            return NSItemProvider(object: note.id.uuidString as NSString)
+                        }
+                        .onDrop(
+                            of: [.text],
+                            delegate: NoteDropDelegate(
+                                model: model,
+                                draggingNoteIDs: $draggingNoteIDs,
+                                dropGap: $dropGap,
+                                pinned: pinned,
+                                gapIndex: index
+                            )
+                        )
+                    }
+                    SectionEndDropTarget(
+                        isEmpty: notes.isEmpty,
+                        dragging: dragging,
+                        active: dropGap == DropGap(pinned: pinned, index: notes.count)
                     )
-                    .onTapGesture { select(note) }
-                    .contextMenu {
-                        noteContextMenu(note, pinned: pinned, targetIDs: model.actionTargetIDs(containing: note.id))
-                    }
-                    .onDrag {
-                        draggingNoteIDs = model.actionTargetIDs(containing: note.id)
-                        return NSItemProvider(object: note.id.uuidString as NSString)
-                    }
                     .onDrop(
                         of: [.text],
                         delegate: NoteDropDelegate(
                             model: model,
                             draggingNoteIDs: $draggingNoteIDs,
+                            dropGap: $dropGap,
                             pinned: pinned,
-                            targetIndex: index
+                            gapIndex: notes.count
                         )
                     )
                 }
-                SectionEndDropTarget(highlighted: notes.isEmpty)
-                    .onDrop(
-                        of: [.text],
-                        delegate: NoteDropDelegate(
-                            model: model,
-                            draggingNoteIDs: $draggingNoteIDs,
-                            pinned: pinned,
-                            targetIndex: notes.count
-                        )
-                    )
             }
         }
     }
@@ -695,20 +713,41 @@ private struct NoteRow: View {
     }
 }
 
+/// Where the drop would land: a gap `index` (0...count) in the pinned or normal section.
+private struct DropGap: Equatable {
+    let pinned: Bool
+    let index: Int
+}
+
+private struct InsertionLine: View {
+    var body: some View {
+        Capsule()
+            .fill(Theme.accent)
+            .frame(height: 2.5)
+            .padding(.horizontal, 2)
+            .allowsHitTesting(false)
+    }
+}
+
 private struct SectionEndDropTarget: View {
-    var highlighted = false
+    let isEmpty: Bool
+    let dragging: Bool
+    let active: Bool
 
     var body: some View {
-        if highlighted {
+        if isEmpty {
             RoundedRectangle(cornerRadius: 6)
-                .stroke(Theme.pinned.opacity(0.5), style: StrokeStyle(lineWidth: 1.2, dash: [4]))
+                .stroke(
+                    active ? Theme.accent : Theme.pinned.opacity(0.5),
+                    style: StrokeStyle(lineWidth: 1.2, dash: [4])
+                )
                 .frame(maxWidth: .infinity)
                 .frame(height: 32)
                 .padding(.horizontal, 2)
         } else {
-            RoundedRectangle(cornerRadius: 4)
-                .fill(Color.primary.opacity(0.001))
-                .frame(height: 4)
+            Color.primary.opacity(0.001)
+                .frame(height: dragging ? 14 : 4)
+                .overlay(alignment: .top) { if active { InsertionLine() } }
         }
     }
 }
@@ -716,26 +755,31 @@ private struct SectionEndDropTarget: View {
 private struct NoteDropDelegate: DropDelegate {
     @ObservedObject var model: AppModel
     @Binding var draggingNoteIDs: Set<UUID>
+    @Binding var dropGap: DropGap?
     let pinned: Bool
-    let targetIndex: Int
+    let gapIndex: Int
 
     func validateDrop(info: DropInfo) -> Bool {
         info.hasItemsConforming(to: [.text])
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
+        showGap()
+        return DropProposal(operation: .move)
     }
 
     func dropEntered(info: DropInfo) {
-        guard !draggingNoteIDs.isEmpty else { return }
-        move(draggingNoteIDs)
+        showGap()
+    }
+
+    func dropExited(info: DropInfo) {
+        if dropGap == gap { dropGap = nil }
     }
 
     func performDrop(info: DropInfo) -> Bool {
         if !draggingNoteIDs.isEmpty {
-            move(draggingNoteIDs)
-            draggingNoteIDs = []
+            commit(draggingNoteIDs)
+            reset()
             return true
         }
 
@@ -744,27 +788,40 @@ private struct NoteDropDelegate: DropDelegate {
         provider.loadObject(ofClass: NSString.self) { item, _ in
             guard let string = item as? NSString, let noteID = UUID(uuidString: string as String) else { return }
             Task { @MainActor in
-                move([noteID])
-                draggingNoteIDs = []
+                commit([noteID])
+                reset()
             }
         }
         return true
     }
 
-    func dropExited(info: DropInfo) {}
+    private var gap: DropGap { DropGap(pinned: pinned, index: gapIndex) }
 
-    private func move(_ noteIDs: Set<UUID>) {
-        model.moveNotes(noteIDs, toSection: pinned, toIndex: targetIndex)
+    private func showGap() {
+        if dropGap != gap { dropGap = gap }
     }
 
+    private func reset() {
+        dropGap = nil
+        draggingNoteIDs = []
+    }
+
+    /// Translates the displayed gap into a target-excluded section index and commits the move.
+    private func commit(_ noteIDs: Set<UUID>) {
+        let section = pinned ? model.pinnedNotes : model.unpinnedNotes
+        let toIndex = section.prefix(gapIndex).filter { !noteIDs.contains($0.id) }.count
+        model.moveNotes(noteIDs, toSection: pinned, toIndex: toIndex)
+    }
 }
 
 /// Catches drops in the sidebar's empty space so a released drag clears its state
 /// (the row/end drop targets sit above this and win where they overlap).
 private struct SidebarDropDelegate: DropDelegate {
     @Binding var draggingNoteIDs: Set<UUID>
+    @Binding var dropGap: DropGap?
 
     func performDrop(info: DropInfo) -> Bool {
+        dropGap = nil
         draggingNoteIDs = []
         return true
     }
