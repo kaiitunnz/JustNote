@@ -62,6 +62,43 @@ final class JustNoteTests: XCTestCase {
         XCTAssertEqual(Note.title(from: "Plain title"), "Plain title")
     }
 
+    func testEditorModePreferenceDefaultsToMarkdown() {
+        let suiteName = "JustNoteTests.editorMode.default.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        XCTAssertEqual(EditorModePreference.initialValue(defaults: defaults), EditorMode.markdown.rawValue)
+        XCTAssertEqual(defaults.string(forKey: EditorModePreference.key), EditorMode.markdown.rawValue)
+        XCTAssertNil(defaults.object(forKey: EditorModePreference.legacyPreviewKey))
+    }
+
+    func testEditorModePreferenceMigratesLegacyPreviewMode() {
+        let markdownSuiteName = "JustNoteTests.editorMode.legacy.markdown.\(UUID().uuidString)"
+        let markdownDefaults = UserDefaults(suiteName: markdownSuiteName)!
+        defer { markdownDefaults.removePersistentDomain(forName: markdownSuiteName) }
+        markdownDefaults.set(true, forKey: EditorModePreference.legacyPreviewKey)
+        XCTAssertEqual(EditorModePreference.initialValue(defaults: markdownDefaults), EditorMode.markdown.rawValue)
+        XCTAssertNil(markdownDefaults.object(forKey: EditorModePreference.legacyPreviewKey))
+
+        let plainSuiteName = "JustNoteTests.editorMode.legacy.plain.\(UUID().uuidString)"
+        let plainDefaults = UserDefaults(suiteName: plainSuiteName)!
+        defer { plainDefaults.removePersistentDomain(forName: plainSuiteName) }
+        plainDefaults.set(false, forKey: EditorModePreference.legacyPreviewKey)
+        XCTAssertEqual(EditorModePreference.initialValue(defaults: plainDefaults), EditorMode.plainText.rawValue)
+        XCTAssertNil(plainDefaults.object(forKey: EditorModePreference.legacyPreviewKey))
+    }
+
+    func testEditorModePreferenceKeepsExplicitMode() {
+        let suiteName = "JustNoteTests.editorMode.explicit.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(EditorMode.plainText.rawValue, forKey: EditorModePreference.key)
+        defaults.set(true, forKey: EditorModePreference.legacyPreviewKey)
+
+        XCTAssertEqual(EditorModePreference.initialValue(defaults: defaults), EditorMode.plainText.rawValue)
+        XCTAssertNil(defaults.object(forKey: EditorModePreference.legacyPreviewKey))
+    }
+
     func testMarkdownParagraphGapHitTestUsesOpenLowerBound() {
         XCTAssertFalse(MarkdownParagraphGapHitTest.contains(y: 40, lastLineMaxY: 40, fragmentMaxY: 52))
         XCTAssertTrue(MarkdownParagraphGapHitTest.contains(y: 46, lastLineMaxY: 40, fragmentMaxY: 52))

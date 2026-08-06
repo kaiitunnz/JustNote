@@ -23,6 +23,28 @@ struct JustNoteApp: App {
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }
+            CommandGroup(after: .textEditing) {
+                ForEach(EditorFormattingAction.allCases, id: \.self) { action in
+                    if let (key, modifiers) = action.keyEquivalent {
+                        Button(action.title) {
+                            EditorCommandRouter.shared.perform(
+                                action,
+                                mode: EditorCommandRouter.shared.mode,
+                                requiresEditorFocus: true
+                            )
+                        }
+                        .keyboardShortcut(KeyEquivalent(Character(key)), modifiers: modifiers)
+                    } else {
+                        Button(action.title) {
+                            EditorCommandRouter.shared.perform(
+                                action,
+                                mode: EditorCommandRouter.shared.mode,
+                                requiresEditorFocus: true
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
