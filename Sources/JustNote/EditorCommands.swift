@@ -98,14 +98,6 @@ enum EditorFontAction: String, CaseIterable {
         }
     }
 
-    var imageName: String {
-        switch self {
-        case .increase: "textformat.size.larger"
-        case .decrease: "textformat.size.smaller"
-        case .reset: "textformat.size"
-        }
-    }
-
     var keyEquivalent: (String, EventModifiers) {
         switch self {
         case .increase: ("+", .command)
