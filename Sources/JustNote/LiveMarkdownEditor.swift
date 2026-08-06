@@ -7,6 +7,7 @@ struct LiveMarkdownEditor: View {
     @Binding var text: String
     let documentID: UUID
     let retainedDocumentIDs: Set<UUID>
+    let fontSize: CGFloat
     var onInteract: (() -> Void)?
     @State private var codeBlocks: [CodeBlockSelection] = []
     @State private var copiedCodeBlockID: Int?
@@ -23,11 +24,12 @@ struct LiveMarkdownEditor: View {
             NativeTextViewWrapper(
                 text: $text,
                 configuration: configuration,
-                fontName: NSFont.systemFont(ofSize: 13).fontName,
-                fontSize: 13,
+                fontName: NSFont.systemFont(ofSize: fontSize).fontName,
+                fontSize: fontSize,
                 documentId: documentID.uuidString,
                 onBuildContextMenu: { menu, _ in
                     EditorContextMenuBuilder.addFormattingItems(to: menu, mode: .markdown)
+                    EditorContextMenuBuilder.addFontItems(to: menu)
                     return menu
                 },
                 onCodeBlockSelectionChange: { codeBlocks = $0 },

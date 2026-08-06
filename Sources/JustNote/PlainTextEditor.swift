@@ -4,6 +4,7 @@ import SwiftUI
 struct PlainTextEditor: NSViewRepresentable {
     @Binding var text: String
     let wrapsLines: Bool
+    let fontSize: CGFloat
     var onInteract: (() -> Void)?
 
     func makeCoordinator() -> Coordinator {
@@ -21,7 +22,7 @@ struct PlainTextEditor: NSViewRepresentable {
         textView.delegate = context.coordinator
         textView.onInteract = onInteract
         textView.string = text
-        textView.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        textView.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         textView.textColor = .labelColor
         textView.drawsBackground = false
         textView.isRichText = false
@@ -49,6 +50,11 @@ struct PlainTextEditor: NSViewRepresentable {
             let selectedRanges = textView.selectedRanges
             textView.string = text
             textView.selectedRanges = selectedRanges
+        }
+        if textView.font?.pointSize != fontSize {
+            textView.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+            textView.layoutManager?.ensureLayout(for: textView.textContainer!)
+            textView.sizeToFit()
         }
         configure(textView: textView, in: scrollView)
 
@@ -132,6 +138,7 @@ final class EndAnchoredTextView: NSTextView {
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = super.menu(for: event) ?? NSMenu(title: "Contextual Menu")
         EditorContextMenuBuilder.addFormattingItems(to: menu, mode: .plainText)
+        EditorContextMenuBuilder.addFontItems(to: menu)
         return menu
     }
 }

@@ -99,6 +99,39 @@ final class JustNoteTests: XCTestCase {
         XCTAssertNil(defaults.object(forKey: EditorModePreference.legacyPreviewKey))
     }
 
+    func testEditorFontSizeClampsToBounds() {
+        XCTAssertEqual(EditorFontSize.clamp(EditorFontSize.minSize - 5), EditorFontSize.minSize)
+        XCTAssertEqual(EditorFontSize.clamp(EditorFontSize.maxSize + 5), EditorFontSize.maxSize)
+        XCTAssertEqual(EditorFontSize.clamp(EditorFontSize.defaultSize), EditorFontSize.defaultSize)
+    }
+
+    func testEditorFontSizeStepsAndClampsAtEdges() {
+        XCTAssertEqual(EditorFontSize.increased(from: EditorFontSize.defaultSize), EditorFontSize.defaultSize + EditorFontSize.step)
+        XCTAssertEqual(EditorFontSize.decreased(from: EditorFontSize.defaultSize), EditorFontSize.defaultSize - EditorFontSize.step)
+        XCTAssertEqual(EditorFontSize.increased(from: EditorFontSize.maxSize), EditorFontSize.maxSize)
+        XCTAssertEqual(EditorFontSize.decreased(from: EditorFontSize.minSize), EditorFontSize.minSize)
+    }
+
+    func testEditorFontSizeCurrentDefaultsWhenUnset() {
+        let suiteName = "JustNoteTests.fontSize.default.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        XCTAssertEqual(EditorFontSize.current(defaults: defaults), EditorFontSize.defaultSize)
+    }
+
+    func testEditorFontSizeCurrentReadsAndClampsPersistedValue() {
+        let suiteName = "JustNoteTests.fontSize.persisted.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(Double(EditorFontSize.maxSize + 10), forKey: EditorFontSize.key)
+        XCTAssertEqual(EditorFontSize.current(defaults: defaults), EditorFontSize.maxSize)
+
+        defaults.set(Double(EditorFontSize.defaultSize + 3), forKey: EditorFontSize.key)
+        XCTAssertEqual(EditorFontSize.current(defaults: defaults), EditorFontSize.defaultSize + 3)
+    }
+
     func testMarkdownParagraphGapHitTestUsesOpenLowerBound() {
         XCTAssertFalse(MarkdownParagraphGapHitTest.contains(y: 40, lastLineMaxY: 40, fragmentMaxY: 52))
         XCTAssertTrue(MarkdownParagraphGapHitTest.contains(y: 46, lastLineMaxY: 40, fragmentMaxY: 52))

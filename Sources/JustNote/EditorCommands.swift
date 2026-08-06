@@ -85,6 +85,83 @@ enum EditorFormattingAction: String, CaseIterable {
     }
 }
 
+enum EditorFontAction: String, CaseIterable {
+    case increase
+    case decrease
+    case reset
+
+    var title: String {
+        switch self {
+        case .increase: "Increase Font Size"
+        case .decrease: "Decrease Font Size"
+        case .reset: "Reset Font Size"
+        }
+    }
+
+    var imageName: String {
+        switch self {
+        case .increase: "textformat.size.larger"
+        case .decrease: "textformat.size.smaller"
+        case .reset: "textformat.size"
+        }
+    }
+
+    var keyEquivalent: (String, EventModifiers) {
+        switch self {
+        case .increase: ("+", .command)
+        case .decrease: ("-", .command)
+        case .reset: ("0", .command)
+        }
+    }
+}
+
+/// Editor font size, persisted under `key` and observed by `MenuView`'s `@AppStorage`.
+/// The stepping/clamping logic is pure so it can be unit-tested without a running app.
+enum EditorFontSize {
+    static let key = "editorFontSize"
+    static let defaultSize: CGFloat = 13
+    static let minSize: CGFloat = 9
+    static let maxSize: CGFloat = 32
+    static let step: CGFloat = 1
+
+    static func clamp(_ value: CGFloat) -> CGFloat {
+        min(max(value, minSize), maxSize)
+    }
+
+    static func increased(from value: CGFloat) -> CGFloat {
+        clamp(value + step)
+    }
+
+    static func decreased(from value: CGFloat) -> CGFloat {
+        clamp(value - step)
+    }
+
+    static func current(defaults: UserDefaults) -> CGFloat {
+        clamp((defaults.object(forKey: key) as? Double).map { CGFloat($0) } ?? defaultSize)
+    }
+}
+
+/// Single funnel for the menu bar, context menu, and keyboard shortcuts to mutate the font size.
+/// Writes the persisted value directly; `MenuView`'s `@AppStorage` picks the change up and reflows
+/// both editors.
+@MainActor
+final class EditorFontController {
+    static let shared = EditorFontController()
+
+    private let defaults = UserDefaults.standard
+
+    func perform(_ action: EditorFontAction) {
+        let current = EditorFontSize.current(defaults: defaults)
+        let next: CGFloat
+        switch action {
+        case .increase: next = EditorFontSize.increased(from: current)
+        case .decrease: next = EditorFontSize.decreased(from: current)
+        case .reset: next = EditorFontSize.defaultSize
+        }
+        defaults.set(Double(next), forKey: EditorFontSize.key)
+    }
+}
+
 extension EventModifiers {
     var appKitFlags: NSEvent.ModifierFlags {
         var flags: NSEvent.ModifierFlags = []
@@ -218,6 +295,51 @@ enum EditorContextMenuBuilder {
         menu.items
             .filter { $0.identifier?.rawValue == "JustNote.editor-formatting" }
             .forEach(menu.removeItem)
+    }
+
+    static func addFontItems(to menu: NSMenu) {
+        removeFontItems(from: menu)
+        menu.addItem(fontSeparator())
+        for action in EditorFontAction.allCases {
+            let (key, modifiers) = action.keyEquivalent
+            let item = NSMenuItem(
+                title: action.title,
+                action: #selector(EditorFontMenuActionTarget.performFontAction(_:)),
+                keyEquivalent: key
+            )
+            item.identifier = fontItemIdentifier
+            item.target = fontTarget
+            item.representedObject = action.rawValue
+            item.keyEquivalentModifierMask = modifiers.appKitFlags
+            menu.addItem(item)
+        }
+    }
+
+    private static func removeFontItems(from menu: NSMenu) {
+        menu.items
+            .filter { $0.identifier == fontItemIdentifier || $0.identifier == fontSeparatorIdentifier }
+            .forEach(menu.removeItem)
+    }
+
+    private static func fontSeparator() -> NSMenuItem {
+        let separator = NSMenuItem.separator()
+        separator.identifier = fontSeparatorIdentifier
+        return separator
+    }
+
+    private static let fontTarget = EditorFontMenuActionTarget()
+    private static let fontItemIdentifier = NSUserInterfaceItemIdentifier("JustNote.editor-font")
+    private static let fontSeparatorIdentifier = NSUserInterfaceItemIdentifier("JustNote.editor-font-separator")
+}
+
+@MainActor
+final class EditorFontMenuActionTarget: NSObject {
+    @objc func performFontAction(_ sender: NSMenuItem) {
+        guard
+            let rawValue = sender.representedObject as? String,
+            let action = EditorFontAction(rawValue: rawValue)
+        else { return }
+        EditorFontController.shared.perform(action)
     }
 }
 
