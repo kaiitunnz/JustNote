@@ -99,6 +99,60 @@ final class JustNoteTests: XCTestCase {
         XCTAssertNil(defaults.object(forKey: EditorModePreference.legacyPreviewKey))
     }
 
+    func testEditorFontSizeStepsAlongRamp() {
+        // Adjacent stops, including the coarsening near the top of the ramp.
+        XCTAssertEqual(EditorFontSize.increased(from: 13), 14)
+        XCTAssertEqual(EditorFontSize.decreased(from: 13), 12)
+        XCTAssertEqual(EditorFontSize.increased(from: 16), 18)
+        XCTAssertEqual(EditorFontSize.decreased(from: 20), 18)
+    }
+
+    func testEditorFontSizeSnapsOffRampValuesInDirectionOfTravel() {
+        XCTAssertEqual(EditorFontSize.increased(from: 17), 18)
+        XCTAssertEqual(EditorFontSize.decreased(from: 17), 16)
+        XCTAssertEqual(EditorFontSize.increased(from: 30), 32)
+        XCTAssertEqual(EditorFontSize.decreased(from: 30), 28)
+    }
+
+    func testEditorFontSizeGrowsUncappedAboveRamp() {
+        XCTAssertEqual(EditorFontSize.increased(from: 32), 32 + EditorFontSize.stepAboveRamp)
+        XCTAssertEqual(EditorFontSize.increased(from: 100), 104)
+        // Coming back down snaps to the top stop, then walks the ramp.
+        XCTAssertEqual(EditorFontSize.decreased(from: 36), 32)
+        XCTAssertEqual(EditorFontSize.decreased(from: 33), 32)
+    }
+
+    func testEditorFontSizeShrinksByOneBelowRampDownToFloor() {
+        XCTAssertEqual(EditorFontSize.decreased(from: 9), 8)
+        XCTAssertEqual(EditorFontSize.increased(from: 8), 9)
+        XCTAssertEqual(EditorFontSize.increased(from: 5), 6)
+        // The floor is a correctness guard, not a style minimum.
+        XCTAssertEqual(EditorFontSize.decreased(from: EditorFontSize.minSize), EditorFontSize.minSize)
+        XCTAssertEqual(EditorFontSize.decreased(from: 3), EditorFontSize.minSize)
+    }
+
+    func testEditorFontSizeCurrentDefaultsWhenUnset() {
+        let suiteName = "JustNoteTests.fontSize.default.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        XCTAssertEqual(EditorFontSize.current(defaults: defaults), EditorFontSize.defaultSize)
+    }
+
+    func testEditorFontSizeCurrentReadsUncappedAndFloors() {
+        let suiteName = "JustNoteTests.fontSize.persisted.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        // No upper cap: a large persisted value passes through unchanged.
+        defaults.set(72, forKey: EditorFontSize.key)
+        XCTAssertEqual(EditorFontSize.current(defaults: defaults), 72)
+
+        // Below the correctness floor: sanitized up to minSize.
+        defaults.set(0, forKey: EditorFontSize.key)
+        XCTAssertEqual(EditorFontSize.current(defaults: defaults), EditorFontSize.minSize)
+    }
+
     func testMarkdownParagraphGapHitTestUsesOpenLowerBound() {
         XCTAssertFalse(MarkdownParagraphGapHitTest.contains(y: 40, lastLineMaxY: 40, fragmentMaxY: 52))
         XCTAssertTrue(MarkdownParagraphGapHitTest.contains(y: 46, lastLineMaxY: 40, fragmentMaxY: 52))

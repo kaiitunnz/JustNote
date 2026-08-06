@@ -85,6 +85,92 @@ enum EditorFormattingAction: String, CaseIterable {
     }
 }
 
+enum EditorFontAction: String, CaseIterable {
+    case increase
+    case decrease
+    case reset
+
+    var title: String {
+        switch self {
+        case .increase: "Increase Font Size"
+        case .decrease: "Decrease Font Size"
+        case .reset: "Reset Font Size"
+        }
+    }
+
+    var keyEquivalent: (String, EventModifiers) {
+        switch self {
+        case .increase: ("+", .command)
+        case .decrease: ("-", .command)
+        case .reset: ("0", .command)
+        }
+    }
+}
+
+/// Editor font size, persisted under `key` and observed by `MenuView`'s `@AppStorage`.
+/// The stepping logic is pure so it can be unit-tested without a running app.
+///
+/// Stepping follows a discrete type ramp: 1 pt granularity at reading sizes, coarsening to
+/// 4 pt for display sizes, so a press feels proportional across the range and off-ramp values
+/// snap to the nearest stop in the direction of travel. The size is not capped — beyond the top
+/// stop it keeps growing by `stepAboveRamp`, and below the bottom stop it shrinks by
+/// `stepBelowRamp`. The only bound is `minSize`, a correctness floor rather than a style limit.
+enum EditorFontSize {
+    static let key = "editorFontSize"
+    static let defaultSize: CGFloat = 13
+    static let ramp: [CGFloat] = [9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 24, 28, 32]
+    static let stepBelowRamp: CGFloat = 1
+    static let stepAboveRamp: CGFloat = 4
+
+    // Not a stylistic minimum: the live-Markdown colorizer treats a glyph whose font pointSize is
+    // <= 1 as a hidden syntax marker, and a font size must be positive, so the editable base font
+    // must stay clear of that sentinel. Nothing caps the top.
+    static let minSize: CGFloat = 2
+
+    static func sanitized(_ value: CGFloat) -> CGFloat {
+        max(value, minSize)
+    }
+
+    static func increased(from value: CGFloat) -> CGFloat {
+        guard let low = ramp.first, let high = ramp.last else { return sanitized(value + stepBelowRamp) }
+        if value < low { return min(sanitized(value + stepBelowRamp), low) }
+        if value >= high { return value + stepAboveRamp }
+        return ramp.first { $0 > value } ?? high
+    }
+
+    static func decreased(from value: CGFloat) -> CGFloat {
+        guard let low = ramp.first, let high = ramp.last else { return sanitized(value - stepBelowRamp) }
+        if value <= low { return sanitized(value - stepBelowRamp) }
+        if value > high { return max(high, value - stepAboveRamp) }
+        return ramp.last { $0 < value } ?? low
+    }
+
+    static func current(defaults: UserDefaults) -> CGFloat {
+        sanitized((defaults.object(forKey: key) as? Double).map { CGFloat($0) } ?? defaultSize)
+    }
+}
+
+/// Single funnel for the menu bar, context menu, and keyboard shortcuts to mutate the font size.
+/// Writes the persisted value directly; `MenuView`'s `@AppStorage` picks the change up and reflows
+/// both editors.
+@MainActor
+final class EditorFontController {
+    static let shared = EditorFontController()
+
+    private let defaults = UserDefaults.standard
+
+    func perform(_ action: EditorFontAction) {
+        let current = EditorFontSize.current(defaults: defaults)
+        let next: CGFloat
+        switch action {
+        case .increase: next = EditorFontSize.increased(from: current)
+        case .decrease: next = EditorFontSize.decreased(from: current)
+        case .reset: next = EditorFontSize.defaultSize
+        }
+        defaults.set(Double(next), forKey: EditorFontSize.key)
+    }
+}
+
 extension EventModifiers {
     var appKitFlags: NSEvent.ModifierFlags {
         var flags: NSEvent.ModifierFlags = []
@@ -218,6 +304,51 @@ enum EditorContextMenuBuilder {
         menu.items
             .filter { $0.identifier?.rawValue == "JustNote.editor-formatting" }
             .forEach(menu.removeItem)
+    }
+
+    static func addFontItems(to menu: NSMenu) {
+        removeFontItems(from: menu)
+        menu.addItem(fontSeparator())
+        for action in EditorFontAction.allCases {
+            let (key, modifiers) = action.keyEquivalent
+            let item = NSMenuItem(
+                title: action.title,
+                action: #selector(EditorFontMenuActionTarget.performFontAction(_:)),
+                keyEquivalent: key
+            )
+            item.identifier = fontItemIdentifier
+            item.target = fontTarget
+            item.representedObject = action.rawValue
+            item.keyEquivalentModifierMask = modifiers.appKitFlags
+            menu.addItem(item)
+        }
+    }
+
+    private static func removeFontItems(from menu: NSMenu) {
+        menu.items
+            .filter { $0.identifier == fontItemIdentifier || $0.identifier == fontSeparatorIdentifier }
+            .forEach(menu.removeItem)
+    }
+
+    private static func fontSeparator() -> NSMenuItem {
+        let separator = NSMenuItem.separator()
+        separator.identifier = fontSeparatorIdentifier
+        return separator
+    }
+
+    private static let fontTarget = EditorFontMenuActionTarget()
+    private static let fontItemIdentifier = NSUserInterfaceItemIdentifier("JustNote.editor-font")
+    private static let fontSeparatorIdentifier = NSUserInterfaceItemIdentifier("JustNote.editor-font-separator")
+}
+
+@MainActor
+final class EditorFontMenuActionTarget: NSObject {
+    @objc func performFontAction(_ sender: NSMenuItem) {
+        guard
+            let rawValue = sender.representedObject as? String,
+            let action = EditorFontAction(rawValue: rawValue)
+        else { return }
+        EditorFontController.shared.perform(action)
     }
 }
 

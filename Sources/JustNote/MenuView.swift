@@ -8,6 +8,7 @@ struct MenuView: View {
     @AppStorage("wrapLines") private var wrapLines = true
     // Placeholder default; init runs the real preference migration and overwrites it.
     @AppStorage("editorMode") private var editorModeRaw = EditorMode.markdown.rawValue
+    @AppStorage(EditorFontSize.key) private var editorFontSize = Double(EditorFontSize.defaultSize)
     @AppStorage("sidebarCollapsed") private var sidebarCollapsed = false
     @State private var showingUninstallConfirmation = false
     @State private var draggingNoteID: UUID?
@@ -336,6 +337,7 @@ struct MenuView: View {
                             text: model.bodyBinding(),
                             documentID: note.id,
                             retainedDocumentIDs: Set(model.notes.map(\.id)),
+                            fontSize: fontSize,
                             onInteract: { model.collapseSelectionToPrimary() }
                         )
                         .contentShape(Rectangle())
@@ -343,6 +345,7 @@ struct MenuView: View {
                         PlainTextEditor(
                             text: model.bodyBinding(),
                             wrapsLines: wrapLines,
+                            fontSize: fontSize,
                             // NSTextView eats clicks at the AppKit layer, so it collapses from its own mouseDown.
                             onInteract: { model.collapseSelectionToPrimary() }
                         )
@@ -539,6 +542,9 @@ struct MenuView: View {
             }
             Button("Jump to last note") { model.selectNote(at: model.orderedNotes.count - 1) }
                 .keyboardShortcut("9", modifiers: .command)
+            // ⌘= mirrors the View menu's ⌘+ (⇧⌘=) so zooming in works without Shift, as users expect.
+            Button("Increase font size") { EditorFontController.shared.perform(.increase) }
+                .keyboardShortcut("=", modifiers: .command)
         }
         .frame(width: 0, height: 0)
         .opacity(0)
@@ -584,6 +590,11 @@ struct MenuView: View {
     private var editorMode: EditorMode {
         get { EditorMode(rawValue: editorModeRaw) ?? .markdown }
         nonmutating set { editorModeRaw = newValue.rawValue }
+    }
+
+    // Sanitize on read too, so a persisted value below the correctness floor never reaches the editors.
+    private var fontSize: CGFloat {
+        EditorFontSize.sanitized(CGFloat(editorFontSize))
     }
 
     private var splitDrag: some Gesture {

@@ -35,6 +35,18 @@ struct JustNoteApp: App {
                     .modifier(OptionalKeyboardShortcut(shortcut: action.keyEquivalent))
                 }
             }
+            // View menu: Zoom-style font-size items (⌘+/⌘−/⌘0), the pointer-and-keyboard
+            // surface for the same actions offered in the editor context menu.
+            CommandGroup(after: .toolbar) {
+                Divider()
+                ForEach(EditorFontAction.allCases, id: \.self) { action in
+                    let (key, modifiers) = action.keyEquivalent
+                    Button(action.title) {
+                        EditorFontController.shared.perform(action)
+                    }
+                    .keyboardShortcut(KeyEquivalent(Character(key)), modifiers: modifiers)
+                }
+            }
         }
     }
 }
