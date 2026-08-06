@@ -266,6 +266,39 @@ final class AppModel: ObservableObject {
         moveNotes([noteID], inPinnedSection: pinned, toIndex: requestedIndex)
     }
 
+    func moveNote(_ noteID: UUID, toSection pinned: Bool, toIndex requestedIndex: Int) {
+        moveNotes([noteID], toSection: pinned, toIndex: requestedIndex)
+    }
+
+    /// Moves notes into the given section at `requestedIndex`, pinning/unpinning as needed.
+    /// Handles both same-section reorder and crossing the pinned/normal boundary.
+    func moveNotes(_ noteIDs: Set<UUID>, toSection pinned: Bool, toIndex requestedIndex: Int) {
+        let targets = notesInDisplayOrder(for: noteIDs)
+        guard !targets.isEmpty else { return }
+        let targetIDs = targets.map(\.id)
+        let targetSet = Set(targetIDs)
+
+        let destExisting = orderedNotes.filter { $0.pinned == pinned && !targetSet.contains($0.id) }.map(\.id)
+        let clamped = min(max(requestedIndex, 0), destExisting.count)
+        var destIDs = destExisting
+        destIDs.insert(contentsOf: targetIDs, at: clamped)
+
+        let others = orderedNotes.filter { $0.pinned != pinned && !targetSet.contains($0.id) }.map(\.id)
+        let newOrder = pinned ? destIDs + others : others + destIDs
+
+        let pinChanges = targets.contains { $0.pinned != pinned }
+        guard newOrder != noteOrderIDs || pinChanges else { return }
+
+        let now = Date()
+        for index in notes.indices where targetSet.contains(notes[index].id) && notes[index].pinned != pinned {
+            notes[index].pinned = pinned
+            notes[index].updatedAt = now
+        }
+        noteOrderIDs = newOrder
+        cleanupSelection()
+        save()
+    }
+
     func moveNotes(_ noteIDs: Set<UUID>, inPinnedSection pinned: Bool, direction: Int) {
         let section = pinned ? pinnedNotes : unpinnedNotes
         guard let range = contiguousRange(for: noteIDs, in: section), canMove(range: range, in: section, direction: direction) else {

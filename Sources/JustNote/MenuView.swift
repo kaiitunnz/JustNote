@@ -11,7 +11,7 @@ struct MenuView: View {
     @AppStorage(EditorFontSize.key) private var editorFontSize = Double(EditorFontSize.defaultSize)
     @AppStorage("sidebarCollapsed") private var sidebarCollapsed = false
     @State private var showingUninstallConfirmation = false
-    @State private var draggingNoteID: UUID?
+    @State private var draggingNoteIDs: Set<UUID> = []
     @State private var splitDragStartWidth: Double?
     @State private var wrapIcon: String?
     @State private var wrapToken = 0
@@ -119,19 +119,24 @@ struct MenuView: View {
                     noteSection("NOTES", notes: model.unpinnedNotes, pinned: false)
                 }
                 .padding(.vertical, 2)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .scrollIndicators(.hidden)
         }
         .padding(12)
         .collapsesSelectionOnTap(model)
+        .onDrop(of: [.text], delegate: SidebarDropDelegate(draggingNoteIDs: $draggingNoteIDs))
         .contextMenu {
             sidebarContextMenu
         }
     }
 
     private func noteSection(_ title: String, notes: [Note], pinned: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if !notes.isEmpty {
+        // An empty section stays hidden until a drag begins, when it reveals a
+        // drop target so the first note can be pinned/unpinned by dragging.
+        let dragging = !draggingNoteIDs.isEmpty
+        return VStack(alignment: .leading, spacing: 6) {
+            if !notes.isEmpty || dragging {
                 Text(title)
                     .font(Theme.rounded(10, weight: .semibold))
                     .foregroundStyle(.tertiary)
@@ -147,27 +152,27 @@ struct MenuView: View {
                         noteContextMenu(note, pinned: pinned, targetIDs: model.actionTargetIDs(containing: note.id))
                     }
                     .onDrag {
-                        draggingNoteID = note.id
+                        draggingNoteIDs = model.actionTargetIDs(containing: note.id)
                         return NSItemProvider(object: note.id.uuidString as NSString)
                     }
                     .onDrop(
                         of: [.text],
                         delegate: NoteDropDelegate(
                             model: model,
-                            draggingNoteID: $draggingNoteID,
+                            draggingNoteIDs: $draggingNoteIDs,
                             pinned: pinned,
                             targetIndex: index
                         )
                     )
                 }
-                SectionEndDropTarget()
+                SectionEndDropTarget(highlighted: notes.isEmpty)
                     .onDrop(
                         of: [.text],
                         delegate: NoteDropDelegate(
                             model: model,
-                            draggingNoteID: $draggingNoteID,
+                            draggingNoteIDs: $draggingNoteIDs,
                             pinned: pinned,
-                            targetIndex: max(notes.count - 1, 0)
+                            targetIndex: notes.count
                         )
                     )
             }
@@ -691,16 +696,26 @@ private struct NoteRow: View {
 }
 
 private struct SectionEndDropTarget: View {
+    var highlighted = false
+
     var body: some View {
-        RoundedRectangle(cornerRadius: 4)
-            .fill(Color.primary.opacity(0.001))
-            .frame(height: 4)
+        if highlighted {
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Theme.pinned.opacity(0.5), style: StrokeStyle(lineWidth: 1.2, dash: [4]))
+                .frame(maxWidth: .infinity)
+                .frame(height: 32)
+                .padding(.horizontal, 2)
+        } else {
+            RoundedRectangle(cornerRadius: 4)
+                .fill(Color.primary.opacity(0.001))
+                .frame(height: 4)
+        }
     }
 }
 
 private struct NoteDropDelegate: DropDelegate {
     @ObservedObject var model: AppModel
-    @Binding var draggingNoteID: UUID?
+    @Binding var draggingNoteIDs: Set<UUID>
     let pinned: Bool
     let targetIndex: Int
 
@@ -713,23 +728,24 @@ private struct NoteDropDelegate: DropDelegate {
     }
 
     func dropEntered(info: DropInfo) {
-        guard let noteID = draggingNoteID else { return }
-        move(noteID)
+        guard !draggingNoteIDs.isEmpty else { return }
+        move(draggingNoteIDs)
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        if let noteID = draggingNoteID {
-            move(noteID)
-            draggingNoteID = nil
+        if !draggingNoteIDs.isEmpty {
+            move(draggingNoteIDs)
+            draggingNoteIDs = []
             return true
         }
 
+        // Fallback for a drag whose in-process state was lost: move just the carried note.
         guard let provider = info.itemProviders(for: [.text]).first else { return false }
         provider.loadObject(ofClass: NSString.self) { item, _ in
             guard let string = item as? NSString, let noteID = UUID(uuidString: string as String) else { return }
             Task { @MainActor in
-                move(noteID)
-                draggingNoteID = nil
+                move([noteID])
+                draggingNoteIDs = []
             }
         }
         return true
@@ -737,11 +753,21 @@ private struct NoteDropDelegate: DropDelegate {
 
     func dropExited(info: DropInfo) {}
 
-    private func move(_ noteID: UUID) {
-        guard model.notes.first(where: { $0.id == noteID })?.pinned == pinned else { return }
-        model.moveNote(noteID, inPinnedSection: pinned, toIndex: targetIndex)
+    private func move(_ noteIDs: Set<UUID>) {
+        model.moveNotes(noteIDs, toSection: pinned, toIndex: targetIndex)
     }
 
+}
+
+/// Catches drops in the sidebar's empty space so a released drag clears its state
+/// (the row/end drop targets sit above this and win where they overlap).
+private struct SidebarDropDelegate: DropDelegate {
+    @Binding var draggingNoteIDs: Set<UUID>
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggingNoteIDs = []
+        return true
+    }
 }
 
 private struct TimestampText: View {
