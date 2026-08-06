@@ -48,6 +48,7 @@ struct PanelSummonPlacement {
 final class FloatingPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+
 }
 
 /// Owns the summoned note panel: a free-floating `NSPanel` toggled by the global shortcut, shown
@@ -63,6 +64,19 @@ final class PanelController: NSObject {
     private var shownAt: Date?
     private var dismissSuspended = false
     private var hasPositioned = false
+
+    /// Per-dimension resize snap state, so the alignment haptic fires once when a dimension engages
+    /// the default size rather than repeatedly while it stays snapped.
+    private var snappedWidth = false
+    private var snappedHeight = false
+
+    /// Per-axis move snap state (same one-shot-haptic purpose as the resize flags).
+    private var snappedX = false
+    private var snappedY = false
+
+    /// Reentrancy guard: repositioning the panel from within `windowDidMove` posts another move
+    /// notification, which must not re-enter the snap logic.
+    private var isSnappingMove = false
 
     /// True when a saved frame was restored at launch — first summon then keeps it instead of
     /// re-centering.
@@ -317,5 +331,55 @@ extension PanelController: NSWindowDelegate {
     /// overlaps the header) would balloon it to fill the screen and persist that frame. Suppress it.
     func windowShouldZoom(_ window: NSWindow, toFrame newFrame: NSRect) -> Bool {
         false
+    }
+
+    /// Magnetically snap each dimension to the default panel size during a live resize. Returning the
+    /// snapped size keeps the dragged edge anchored while the size sticks at the default within the
+    /// threshold and releases once pulled past it.
+    func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+        let result = PanelSnap.snapSize(
+            frameSize,
+            to: NSSize(width: Theme.panelWidth, height: Theme.panelHeight)
+        )
+        if (result.snappedWidth && !snappedWidth) || (result.snappedHeight && !snappedHeight) {
+            PanelSnap.performAlignmentHaptic()
+        }
+        snappedWidth = result.snappedWidth
+        snappedHeight = result.snappedHeight
+        return result.size
+    }
+
+    func windowDidEndLiveResize(_ notification: Notification) {
+        snappedWidth = false
+        snappedHeight = false
+    }
+
+    /// Magnetically snap each axis to the screen center during a titlebar drag. Titlebar drags are
+    /// driven by the WindowServer and bypass every `NSWindow` frame setter, so the only place to
+    /// intervene is after the fact: `windowDidMove` fires on each drag step, and re-anchoring the
+    /// origin here holds the panel at center while the cursor stays within the threshold. Gate on a
+    /// physically-held left button so programmatic moves (summon positioning) pass through untouched,
+    /// and skip edge resizes, which move the origin but belong to `windowWillResize`.
+    func windowDidMove(_ notification: Notification) {
+        guard !isSnappingMove, !panel.inLiveResize else { return }
+        guard NSEvent.pressedMouseButtons & 0x1 != 0 else {
+            snappedX = false
+            snappedY = false
+            return
+        }
+        guard let visible = (panel.screen ?? NSScreen.main)?.visibleFrame else { return }
+
+        let result = PanelSnap.snapOrigin(panel.frame.origin, windowSize: panel.frame.size, in: visible)
+        if (result.snappedX && !snappedX) || (result.snappedY && !snappedY) {
+            PanelSnap.performAlignmentHaptic()
+        }
+        snappedX = result.snappedX
+        snappedY = result.snappedY
+
+        if result.origin != panel.frame.origin {
+            isSnappingMove = true
+            panel.setFrameOrigin(result.origin)
+            isSnappingMove = false
+        }
     }
 }
