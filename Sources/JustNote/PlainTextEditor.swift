@@ -33,6 +33,7 @@ struct PlainTextEditor: NSViewRepresentable {
         textView.minSize = NSSize(width: 0, height: 0)
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.isVerticallyResizable = true
+        EditorCommandRouter.shared.register(textView)
 
         scrollView.documentView = textView
         configure(textView: textView, in: scrollView)
@@ -41,6 +42,7 @@ struct PlainTextEditor: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? EndAnchoredTextView else { return }
+        EditorCommandRouter.shared.register(textView)
         textView.onInteract = onInteract
         context.coordinator.text = $text
         if textView.string != text {
@@ -111,6 +113,7 @@ final class EndAnchoredTextView: NSTextView {
     var onInteract: (() -> Void)?
 
     override func mouseDown(with event: NSEvent) {
+        EditorCommandRouter.shared.register(self)
         onInteract?()
         guard let layoutManager, let textContainer else {
             super.mouseDown(with: event)
@@ -124,5 +127,11 @@ final class EndAnchoredTextView: NSTextView {
             return
         }
         super.mouseDown(with: event)
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = super.menu(for: event) ?? NSMenu(title: "Contextual Menu")
+        EditorContextMenuBuilder.addFormattingItems(to: menu, mode: .plainText)
+        return menu
     }
 }

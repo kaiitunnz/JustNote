@@ -19,6 +19,10 @@ struct LiveMarkdownEditor: View {
                 fontName: NSFont.systemFont(ofSize: 13).fontName,
                 fontSize: 13,
                 documentId: documentID.uuidString,
+                onBuildContextMenu: { menu, _ in
+                    EditorContextMenuBuilder.addFormattingItems(to: menu, mode: .markdown)
+                    return menu
+                },
                 onCodeBlockSelectionChange: { codeBlocks = $0 },
                 retainedScrollDocumentIds: Set(retainedDocumentIDs.map(\.uuidString))
             )
@@ -49,10 +53,26 @@ struct LiveMarkdownEditor: View {
             }
         }
         .background(MarkdownCodeBlockHoverMonitor(codeBlocks: codeBlocks, hoveredCodeBlockID: $hoveredCodeBlockID))
+        .background(EditorTextViewRegistration(documentText: text))
     }
 
     private var configuration: MarkdownEditorConfiguration {
         var configuration = MarkdownEditorConfiguration.default
+        var services = configuration.services
+        services.bus = MarkdownEditorBus(
+            applyBoldRequest: EditorFormattingAction.bold.notificationName,
+            applyItalicRequest: EditorFormattingAction.italic.notificationName,
+            applyHeadingRequest: EditorFormattingAction.heading.notificationName,
+            applyStrikethroughRequest: EditorFormattingAction.strikethrough.notificationName,
+            applyInlineCodeRequest: EditorFormattingAction.inlineCode.notificationName,
+            applyBlockquoteRequest: EditorFormattingAction.blockquote.notificationName,
+            applyUnorderedListRequest: EditorFormattingAction.unorderedList.notificationName,
+            applyOrderedListRequest: EditorFormattingAction.orderedList.notificationName,
+            applyLinkRequest: EditorFormattingAction.link.notificationName,
+            applyCodeBlockRequest: EditorFormattingAction.codeBlock.notificationName,
+            applyHorizontalRuleRequest: EditorFormattingAction.horizontalRule.notificationName
+        )
+        configuration.services = services
         configuration.theme.headingMarker = MarkdownPalette.blue
         configuration.theme.link = MarkdownPalette.blue
         configuration.theme.incompleteLink = MarkdownPalette.orange
@@ -619,7 +639,7 @@ private final class MarkdownInteractionMonitorView: NSView {
     }
 }
 
-private extension NSView {
+extension NSView {
     var textViews: [NSTextView] {
         let ownTextView = (self as? NSTextView).map { [$0] } ?? []
         return ownTextView + subviews.flatMap(\.textViews)

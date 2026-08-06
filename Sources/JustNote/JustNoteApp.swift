@@ -23,6 +23,32 @@ struct JustNoteApp: App {
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }
+            CommandGroup(after: .textEditing) {
+                ForEach(EditorFormattingAction.allCases, id: \.self) { action in
+                    Button(action.title) {
+                        EditorCommandRouter.shared.perform(
+                            action,
+                            mode: EditorCommandRouter.shared.mode,
+                            requiresEditorFocus: true
+                        )
+                    }
+                    .modifier(OptionalKeyboardShortcut(shortcut: action.keyEquivalent))
+                }
+            }
+        }
+    }
+}
+
+/// Applies a keyboard shortcut only when the action defines one, so the menu button can be
+/// declared once regardless of whether it has a shortcut.
+private struct OptionalKeyboardShortcut: ViewModifier {
+    let shortcut: (String, SwiftUI.EventModifiers)?
+
+    func body(content: Content) -> some View {
+        if let (key, modifiers) = shortcut {
+            content.keyboardShortcut(KeyEquivalent(Character(key)), modifiers: modifiers)
+        } else {
+            content
         }
     }
 }

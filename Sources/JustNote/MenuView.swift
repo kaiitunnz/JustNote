@@ -2,16 +2,12 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-private enum EditorMode: String {
-    case plainText
-    case markdown
-}
-
 struct MenuView: View {
     @ObservedObject var model: AppModel
     @AppStorage("sidebarWidth") private var sidebarWidth = Double(Theme.sidebarWidth)
     @AppStorage("wrapLines") private var wrapLines = true
-    @AppStorage("editorMode") private var editorModeRaw = EditorMode.plainText.rawValue
+    // Placeholder default; init runs the real preference migration and overwrites it.
+    @AppStorage("editorMode") private var editorModeRaw = EditorMode.markdown.rawValue
     @AppStorage("sidebarCollapsed") private var sidebarCollapsed = false
     @State private var showingUninstallConfirmation = false
     @State private var draggingNoteID: UUID?
@@ -21,7 +17,7 @@ struct MenuView: View {
 
     init(model: AppModel) {
         self.model = model
-        _editorModeRaw = AppStorage(wrappedValue: Self.initialEditorModeRawValue(), "editorMode")
+        _editorModeRaw = AppStorage(wrappedValue: EditorModePreference.initialValue(defaults: .standard), "editorMode")
     }
 
     var body: some View {
@@ -46,6 +42,8 @@ struct MenuView: View {
         .overlay(alignment: .center) { wrapIndicator }
         .tint(Theme.accent)
         .containerBackground(.thinMaterial, for: .window)
+        .onAppear { EditorCommandRouter.shared.setMode(editorMode) }
+        .onChange(of: editorModeRaw) { _, _ in EditorCommandRouter.shared.setMode(editorMode) }
         .alert("Uninstall JustNote?", isPresented: $showingUninstallConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("Uninstall", role: .destructive, action: model.uninstallAndQuit)
@@ -421,7 +419,6 @@ struct MenuView: View {
     }
 
     private func createNote() {
-        editorMode = .plainText
         model.createNote()
     }
 
@@ -494,7 +491,6 @@ struct MenuView: View {
 
     private func pasteAsNewNote() {
         guard let text = pasteboardText else { return }
-        editorMode = .plainText
         model.createNote(body: text)
     }
 
@@ -586,20 +582,8 @@ struct MenuView: View {
     }
 
     private var editorMode: EditorMode {
-        get { EditorMode(rawValue: editorModeRaw) ?? .plainText }
+        get { EditorMode(rawValue: editorModeRaw) ?? .markdown }
         nonmutating set { editorModeRaw = newValue.rawValue }
-    }
-
-    private static func initialEditorModeRawValue() -> String {
-        let defaults = UserDefaults.standard
-        if let editorModeRaw = defaults.string(forKey: "editorMode") {
-            return editorModeRaw
-        }
-        let legacyPreviewMode = defaults.bool(forKey: "previewMode")
-        let editorModeRaw = (legacyPreviewMode ? EditorMode.markdown : .plainText).rawValue
-        defaults.set(editorModeRaw, forKey: "editorMode")
-        defaults.removeObject(forKey: "previewMode")
-        return editorModeRaw
     }
 
     private var splitDrag: some Gesture {
