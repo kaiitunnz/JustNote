@@ -12,6 +12,7 @@ final class PanelDragHandle: NSView {
 
     private weak var underlyingView: NSView?
     private var isDragging = false
+    private var activeHeight: CGFloat = 0
 
     private let accessibilityInteractiveRoles: Set<String> = [
         "AXButton", "AXCheckBox", "AXComboBox", "AXLink", "AXPopUpButton", "AXRadioButton",
@@ -22,10 +23,18 @@ final class PanelDragHandle: NSView {
         underlyingView = view
     }
 
+    func setActiveHeight(_ height: CGFloat) {
+        activeHeight = max(0, height)
+    }
+
     override func hitTest(_ point: NSPoint) -> NSView? {
+        guard point.y >= frame.maxY - activeHeight, point.y <= frame.maxY else { return nil }
         guard let underlyingView else { return self }
 
-        let underlyingPoint = underlyingView.convert(point, from: self)
+        // AppKit supplies this hit-test point in the handle's superview coordinate space. Convert
+        // through the handle's local space before asking the sibling hosting view for its target.
+        let localPoint = superview.map { convert(point, from: $0) } ?? point
+        let underlyingPoint = underlyingView.convert(localPoint, from: self)
         guard let target = underlyingView.hitTest(underlyingPoint) else { return self }
 
         // SwiftUI controls hosted by NSHostingView may not appear in the AppKit hit-test view

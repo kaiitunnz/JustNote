@@ -395,7 +395,9 @@ final class PanelController: NSObject {
     private func updateDragHandleHeight() {
         guard let constraint = dragHandleHeightConstraint else { return }
         let titlebarHeight = panel.frame.height - panel.contentLayoutRect.height
-        constraint.constant = max(0, titlebarHeight)
+        let height = max(0, titlebarHeight)
+        dragHandle.setActiveHeight(height)
+        constraint.constant = height
     }
 }
 

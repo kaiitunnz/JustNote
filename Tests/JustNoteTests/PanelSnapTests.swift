@@ -124,6 +124,7 @@ final class PanelSnapTests: XCTestCase {
 
         let handle = PanelDragHandle(frame: content.bounds)
         handle.passThroughEvents(to: content)
+        handle.setActiveHeight(40)
 
         XCTAssertNil(handle.hitTest(NSPoint(x: 34, y: 20)))
         XCTAssertNil(handle.hitTest(NSPoint(x: 94, y: 20)))
@@ -135,9 +136,37 @@ final class PanelSnapTests: XCTestCase {
         let content = AccessibilityHitTestView(frame: NSRect(x: 0, y: 0, width: 200, height: 40))
         let handle = PanelDragHandle(frame: content.bounds)
         handle.passThroughEvents(to: content)
+        handle.setActiveHeight(40)
 
         XCTAssertNil(handle.hitTest(NSPoint(x: 34, y: 20)))
         XCTAssertTrue(handle.hitTest(NSPoint(x: 150, y: 20)) === handle)
+    }
+
+    @MainActor
+    func testPanelDragHandleDoesNotCaptureBelowActiveStrip() {
+        let content = NSView(frame: NSRect(x: 0, y: 0, width: 200, height: 200))
+        let handle = PanelDragHandle(frame: NSRect(x: 0, y: 160, width: 200, height: 40))
+        handle.passThroughEvents(to: content)
+        handle.setActiveHeight(40)
+
+        XCTAssertNil(handle.hitTest(NSPoint(x: 100, y: 100)))
+        XCTAssertTrue(handle.hitTest(NSPoint(x: 100, y: 180)) === handle)
+    }
+
+    @MainActor
+    func testPanelDragHandlePassesThroughParentCoordinateControls() {
+        let parent = NSView(frame: NSRect(x: 0, y: 0, width: 200, height: 200))
+        let content = NSView(frame: parent.bounds)
+        parent.addSubview(content)
+        let button = NSButton(frame: NSRect(x: 20, y: 168, width: 28, height: 24))
+        content.addSubview(button)
+
+        let handle = PanelDragHandle(frame: NSRect(x: 0, y: 160, width: 200, height: 40))
+        parent.addSubview(handle)
+        handle.passThroughEvents(to: content)
+        handle.setActiveHeight(40)
+
+        XCTAssertNil(handle.hitTest(NSPoint(x: 34, y: 180)))
     }
 
     @MainActor
