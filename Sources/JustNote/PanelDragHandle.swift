@@ -28,6 +28,14 @@ final class PanelDragHandle: NSView {
         let underlyingPoint = underlyingView.convert(point, from: self)
         guard let target = underlyingView.hitTest(underlyingPoint) else { return self }
 
+        // SwiftUI controls hosted by NSHostingView may not appear in the AppKit hit-test view
+        // hierarchy. Ask the accessibility tree as well, since it still identifies the control at
+        // the pointer location even when the AppKit target is only the hosting view itself.
+        if let element = underlyingView.accessibilityHitTest(underlyingPoint) as? NSAccessibilityElement,
+           isInteractiveAccessibilityElement(element) {
+            return nil
+        }
+
         // The handle is layered above SwiftUI so it can own blank titlebar pixels. Walk up the
         // underlying hit-test result and yield to controls/text views so header buttons remain
         // clickable even though they sit inside the titlebar-height overlay.
@@ -43,6 +51,11 @@ final class PanelDragHandle: NSView {
 
     private func isInteractiveAccessibilityElement(_ view: NSView) -> Bool {
         guard let role = view.accessibilityRole()?.rawValue else { return false }
+        return accessibilityInteractiveRoles.contains(role)
+    }
+
+    private func isInteractiveAccessibilityElement(_ element: NSAccessibilityElement) -> Bool {
+        guard let role = element.accessibilityRole()?.rawValue else { return false }
         return accessibilityInteractiveRoles.contains(role)
     }
 

@@ -131,6 +131,16 @@ final class PanelSnapTests: XCTestCase {
     }
 
     @MainActor
+    func testPanelDragHandlePassesThroughAccessibilityOnlyControls() {
+        let content = AccessibilityHitTestView(frame: NSRect(x: 0, y: 0, width: 200, height: 40))
+        let handle = PanelDragHandle(frame: content.bounds)
+        handle.passThroughEvents(to: content)
+
+        XCTAssertNil(handle.hitTest(NSPoint(x: 34, y: 20)))
+        XCTAssertTrue(handle.hitTest(NSPoint(x: 150, y: 20)) === handle)
+    }
+
+    @MainActor
     func testPanelDragHandleReportsOnlyAnActiveGesture() throws {
         let handle = PanelDragHandle(frame: NSRect(x: 0, y: 0, width: 200, height: 40))
         var began = 0
@@ -189,5 +199,23 @@ final class PanelSnapTests: XCTestCase {
 private final class RoleOnlyButtonView: NSView {
     override func accessibilityRole() -> NSAccessibility.Role? {
         NSAccessibility.Role(rawValue: "AXButton")
+    }
+}
+
+private final class AccessibilityHitTestView: NSView {
+    private let button = RoleOnlyButtonView(frame: NSRect(x: 20, y: 8, width: 28, height: 24))
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        addSubview(button)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func accessibilityHitTest(_ point: NSPoint) -> Any? {
+        point.x >= button.frame.minX && point.x <= button.frame.maxX &&
+            point.y >= button.frame.minY && point.y <= button.frame.maxY ? button : self
     }
 }
