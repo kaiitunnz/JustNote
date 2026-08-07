@@ -48,6 +48,7 @@ struct PanelSummonPlacement {
 final class FloatingPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+
 }
 
 /// Owns the summoned note panel: a free-floating `NSPanel` toggled by the global shortcut, shown
@@ -59,10 +60,25 @@ final class FloatingPanel: NSPanel {
 @MainActor
 final class PanelController: NSObject {
     private let panel: FloatingPanel
+    private let dragHandle: PanelDragHandle
+    private var dragHandleHeightConstraint: NSLayoutConstraint?
     private var escapeMonitor: Any?
     private var shownAt: Date?
     private var dismissSuspended = false
     private var hasPositioned = false
+
+    /// Per-dimension resize snap state, so the alignment haptic fires once when a dimension engages
+    /// the default size rather than repeatedly while it stays snapped.
+    private var snappedWidth = false
+    private var snappedHeight = false
+
+    /// State captured by the app-owned title strip while it is dragging the panel.
+    private var dragStartMouseLocation: NSPoint?
+    private var dragStartOrigin: NSPoint?
+    private var dragSnappedX = false
+    private var dragSnappedY = false
+    private weak var dragSnapScreen: NSScreen?
+    private var dragSnapVisibleFrame: NSRect?
 
     /// True when a saved frame was restored at launch — first summon then keeps it instead of
     /// re-centering.
@@ -76,6 +92,7 @@ final class PanelController: NSObject {
     private let showGrace: TimeInterval = 0.35
 
     init(model: AppModel) {
+        dragHandle = PanelDragHandle()
         panel = FloatingPanel(
             contentRect: NSRect(x: 0, y: 0, width: Theme.panelWidth, height: Theme.panelHeight),
             styleMask: [.titled, .fullSizeContentView, .resizable],
@@ -92,6 +109,9 @@ final class PanelController: NSObject {
         panel.minSize = NSSize(width: Theme.minPanelWidth, height: Theme.minPanelHeight)
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
+        // Native titlebar movement is WindowServer-owned and cannot be reconciled with live frame
+        // snapping. PanelDragHandle owns the complete titlebar-height region below.
+        panel.isMovable = false
         panel.standardWindowButton(.closeButton)?.isHidden = true
         panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
         panel.standardWindowButton(.zoomButton)?.isHidden = true
@@ -121,7 +141,22 @@ final class PanelController: NSObject {
             hostingView.bottomAnchor.constraint(equalTo: effectView.bottomAnchor),
         ])
 
+        dragHandle.translatesAutoresizingMaskIntoConstraints = false
+        dragHandle.passThroughEvents(to: hostingView)
+        dragHandle.onDragBegan = { [weak self] in self?.beginPanelDrag() }
+        dragHandle.onDrag = { [weak self] in self?.continuePanelDrag() }
+        dragHandle.onDragEnded = { [weak self] in self?.endPanelDrag() }
+        effectView.addSubview(dragHandle)
+        NSLayoutConstraint.activate([
+            dragHandle.leadingAnchor.constraint(equalTo: effectView.leadingAnchor),
+            dragHandle.trailingAnchor.constraint(equalTo: effectView.trailingAnchor),
+            dragHandle.topAnchor.constraint(equalTo: effectView.topAnchor),
+        ])
+        dragHandleHeightConstraint = dragHandle.heightAnchor.constraint(equalToConstant: 0)
+        dragHandleHeightConstraint?.isActive = true
+
         panel.contentView = effectView
+        updateDragHandleHeight()
 
         // Persist and restore the user's frame across launches. With an autosave name set, the
         // panel writes its frame to UserDefaults on every move/resize automatically; `setFrameUsingName`
@@ -288,6 +323,82 @@ final class PanelController: NSObject {
         if let escapeMonitor { NSEvent.removeMonitor(escapeMonitor) }
         escapeMonitor = nil
     }
+
+    private func beginPanelDrag() {
+        guard panel.isVisible, !panel.inLiveResize else { return }
+        dragStartMouseLocation = NSEvent.mouseLocation
+        dragStartOrigin = panel.frame.origin
+        dragSnappedX = false
+        dragSnappedY = false
+        dragSnapScreen = nil
+        dragSnapVisibleFrame = nil
+    }
+
+    private func continuePanelDrag() {
+        guard
+            let startMouse = dragStartMouseLocation,
+            let startOrigin = dragStartOrigin,
+            panel.isVisible,
+            !panel.inLiveResize
+        else { return }
+
+        let mouse = NSEvent.mouseLocation
+        let proposedOrigin = NSPoint(
+            x: startOrigin.x + mouse.x - startMouse.x,
+            y: startOrigin.y + mouse.y - startMouse.y
+        )
+        let proposedFrame = NSRect(origin: proposedOrigin, size: panel.frame.size)
+        let screen = screenContainingLargestVisibleArea(of: proposedFrame)
+            ?? screenContainingMouse()
+            ?? NSScreen.main
+        guard let visible = screen?.visibleFrame else {
+            panel.setFrameOrigin(proposedOrigin)
+            return
+        }
+
+        if dragSnapScreen !== screen || dragSnapVisibleFrame != visible {
+            // A center target belongs to a specific display. Re-arm both axes when crossing to a
+            // new target so the new display uses the engage threshold and emits its own haptic.
+            dragSnappedX = false
+            dragSnappedY = false
+            dragSnapScreen = screen
+            dragSnapVisibleFrame = visible
+        }
+
+        let result = PanelSnap.snapOrigin(
+            proposedOrigin,
+            windowSize: panel.frame.size,
+            in: visible,
+            snappedX: dragSnappedX,
+            snappedY: dragSnappedY
+        )
+        if (result.snappedX && !dragSnappedX) || (result.snappedY && !dragSnappedY) {
+            PanelSnap.performAlignmentHaptic()
+        }
+        dragSnappedX = result.snappedX
+        dragSnappedY = result.snappedY
+        panel.setFrameOrigin(result.origin)
+    }
+
+    private func endPanelDrag() {
+        dragStartMouseLocation = nil
+        dragStartOrigin = nil
+        dragSnappedX = false
+        dragSnappedY = false
+        dragSnapScreen = nil
+        dragSnapVisibleFrame = nil
+    }
+
+    /// The full-size-content-view content extends under the titlebar. Use AppKit's unobscured
+    /// content layout rect instead of duplicating the current titlebar height, which can vary with
+    /// appearance, toolbar configuration, or future window-style changes.
+    private func updateDragHandleHeight() {
+        guard let constraint = dragHandleHeightConstraint else { return }
+        let titlebarHeight = panel.frame.height - panel.contentLayoutRect.height
+        let height = max(0, titlebarHeight)
+        dragHandle.setActiveHeight(height)
+        constraint.constant = height
+    }
 }
 
 extension PanelController: NSWindowDelegate {
@@ -308,9 +419,10 @@ extension PanelController: NSWindowDelegate {
         }
     }
 
-    /// Single teardown point for the key monitor, robust to every close path.
+    /// Single teardown point for the event monitors, robust to every close path.
     func windowWillClose(_ notification: Notification) {
         removeEscapeMonitor()
+        endPanelDrag()
     }
 
     /// `.resizable` makes the panel zoomable, so a double-click on the transparent titlebar (which
@@ -318,4 +430,41 @@ extension PanelController: NSWindowDelegate {
     func windowShouldZoom(_ window: NSWindow, toFrame newFrame: NSRect) -> Bool {
         false
     }
+
+    /// Magnetically snap each dimension to the default panel size during a live resize. Returning the
+    /// snapped size keeps the dragged edge anchored while the size sticks at the default within the
+    /// threshold and releases once pulled past it. Only the dimension the drag actually changes is
+    /// eligible — dragging one edge must not tug the perpendicular dimension to the default (and fire
+    /// its haptic) when it happens to already sit near it.
+    func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+        let current = sender.frame.size
+        var result = PanelSnap.snapSize(
+            frameSize,
+            to: NSSize(width: Theme.panelWidth, height: Theme.panelHeight)
+        )
+        if frameSize.width == current.width {
+            result.size.width = frameSize.width
+            result.snappedWidth = false
+        }
+        if frameSize.height == current.height {
+            result.size.height = frameSize.height
+            result.snappedHeight = false
+        }
+        if (result.snappedWidth && !snappedWidth) || (result.snappedHeight && !snappedHeight) {
+            PanelSnap.performAlignmentHaptic()
+        }
+        snappedWidth = result.snappedWidth
+        snappedHeight = result.snappedHeight
+        return result.size
+    }
+
+    func windowDidEndLiveResize(_ notification: Notification) {
+        snappedWidth = false
+        snappedHeight = false
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        updateDragHandleHeight()
+    }
+
 }

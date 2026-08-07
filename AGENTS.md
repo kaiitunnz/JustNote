@@ -56,6 +56,13 @@ hidden. Rationale, each a real dead end tried and rejected:
   **titlebar strip** instead; header buttons sit below it and still receive clicks.
 - **`windowShouldZoom` returns `false`** — `.resizable` makes the panel zoomable, and a titlebar
   double-click would otherwise balloon it and persist that frame.
+- **Native titlebar drags bypass every `NSWindow` frame setter.** The WindowServer moves a titled
+  window out-of-process during a native titlebar drag, so re-anchoring the origin live fights the server
+  and **flickers**. Native movement is disabled and the complete titlebar-height region is owned by an
+  app-owned `PanelDragHandle`; its hit-testing passes buttons/controls through to SwiftUI while blank
+  titlebar pixels move the panel with hysteretic center snapping (12 pt engage / 24 pt release) and an
+  alignment haptic on engagement. Resize-snapping is different — it *is* live, via `windowWillResize`,
+  which AppKit applies cleanly with no server fight.
 - **Frame persistence** is `setFrameAutosaveName` (auto-saves on move/resize) + `setFrameUsingName`
   restored on first summon; off-screen frames recenter.
 - **Dismissal** is standard window behavior: the toggle shortcut, Escape (a local `keyDown` monitor,
