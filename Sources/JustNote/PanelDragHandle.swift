@@ -31,7 +31,8 @@ final class PanelDragHandle: NSView {
         // SwiftUI controls hosted by NSHostingView may not appear in the AppKit hit-test view
         // hierarchy. Ask the accessibility tree as well, since it still identifies the control at
         // the pointer location even when the AppKit target is only the hosting view itself.
-        if let element = underlyingView.accessibilityHitTest(underlyingPoint) as? NSAccessibilityElement,
+        let accessibilityPoint = underlyingView.window?.convertPoint(toScreen: underlyingPoint) ?? underlyingPoint
+        if let element = underlyingView.accessibilityHitTest(accessibilityPoint) as? NSAccessibilityElement,
            isInteractiveAccessibilityElement(element) {
             return nil
         }
