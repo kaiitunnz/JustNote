@@ -56,15 +56,13 @@ hidden. Rationale, each a real dead end tried and rejected:
   **titlebar strip** instead; header buttons sit below it and still receive clicks.
 - **`windowShouldZoom` returns `false`** — `.resizable` makes the panel zoomable, and a titlebar
   double-click would otherwise balloon it and persist that frame.
-- **Titlebar drags bypass every `NSWindow` frame setter.** The WindowServer moves a titled window
-  out-of-process during a titlebar drag; `setFrame`/`setFrameOrigin` overrides are never called, and
-  re-anchoring the origin live (from `windowDidMove`) to snap toward center *fights* the server and
-  **flickers**. So center-snapping shows a **live guide on a separate overlay window** (`SnapGuideOverlay`,
-  driven from `windowDidMove`, with an alignment haptic as each axis enters the zone) and only moves the
-  panel on **drag release** — a left-mouse-up monitor glides it to center if it landed within threshold.
-  Drawing the cue on its own window is what avoids the flicker; never move the dragged panel itself
-  mid-drag. Resize-snapping is different — it *is* live, via `windowWillResize`, which AppKit applies
-  cleanly with no server fight.
+- **Native titlebar drags bypass every `NSWindow` frame setter.** The WindowServer moves a titled
+  window out-of-process during a native titlebar drag, so re-anchoring the origin live fights the server
+  and **flickers**. Native movement is disabled and the complete titlebar-height region is owned by an
+  app-owned `PanelDragHandle`; its hit-testing passes buttons/controls through to SwiftUI while blank
+  titlebar pixels move the panel with hysteretic center snapping (12 pt engage / 24 pt release) and an
+  alignment haptic on engagement. Resize-snapping is different — it *is* live, via `windowWillResize`,
+  which AppKit applies cleanly with no server fight.
 - **Frame persistence** is `setFrameAutosaveName` (auto-saves on move/resize) + `setFrameUsingName`
   restored on first summon; off-screen frames recenter.
 - **Dismissal** is standard window behavior: the toggle shortcut, Escape (a local `keyDown` monitor,
