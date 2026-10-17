@@ -26,9 +26,9 @@ settings:
 
 packages:
   MarkdownEngine:
-    url: https://github.com/nodes-app/swift-markdown-engine.git
-    # Pre-1.0 package: pin exactly so its editor behavior and API do not drift between checkouts.
-    exactVersion: 0.10.0
+    url: https://github.com/kaiitunnz/swift-markdown-engine.git
+    # Table viewport patch on 0.10.0; pin the commit so editor behavior stays reproducible.
+    revision: 0f90305feb2ae6cf0cdb42548422e4008be36758
   KeyboardShortcuts:
     url: https://github.com/sindresorhus/KeyboardShortcuts.git
     # Exact-version pin (the .xcodeproj — and its Package.resolved — is git-ignored, so a
