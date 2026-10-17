@@ -95,7 +95,7 @@ struct LiveMarkdownEditor: View {
         )
         configuration.paragraph = ParagraphStyle(spacingFactor: 0.16, lineHeightExtraSpacing: 1)
         configuration.textInsets = TextInsets(horizontal: 10, vertical: 10)
-        configuration.overscroll = OverscrollPolicy(percent: 0, maxPoints: 0, minPoints: 0)
+        configuration.overscroll = EditorBottomSpace.policy
         return configuration
     }
 }
