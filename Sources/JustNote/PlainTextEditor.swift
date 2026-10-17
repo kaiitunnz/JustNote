@@ -6,6 +6,7 @@ struct PlainTextEditor: NSViewRepresentable {
     let wrapsLines: Bool
     let fontSize: CGFloat
     var onInteract: (() -> Void)?
+    var onRegister: ((NSTextView) -> Void)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(text: $text)
@@ -38,6 +39,7 @@ struct PlainTextEditor: NSViewRepresentable {
 
         scrollView.documentView = textView
         configure(textView: textView, in: scrollView)
+        DispatchQueue.main.async { onRegister?(textView) }
         return scrollView
     }
 
@@ -64,6 +66,7 @@ struct PlainTextEditor: NSViewRepresentable {
             textView.sizeToFit()
             scrollView.contentView.scroll(to: .zero)
         }
+        DispatchQueue.main.async { onRegister?(textView) }
     }
 
     private func configure(textView: EndAnchoredTextView, in scrollView: NSScrollView) {

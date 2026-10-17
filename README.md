@@ -11,6 +11,7 @@ A macOS accessory app for plain-text notes. It runs in the background, opens as 
 - Keeps pinned and unpinned notes in separate drag-movable sections.
 - Supports a draggable sidebar/editor divider.
 - Toggles soft wrapping so hard newlines are easier to distinguish from wrapped text.
+- Finds text in the current note in Plain Text and Markdown modes with ⌘F or Ctrl+F. Return / Shift+Return and ⌘G / ⇧⌘G navigate matches; Escape closes Find before hiding the panel.
 - Reveals the storage folder in Finder from the footer path.
 - Can uninstall itself by clearing Application Support, moving the app bundle to the Trash, and quitting.
 

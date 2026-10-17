@@ -105,11 +105,27 @@ final class NoteFindTests: XCTestCase {
         XCTAssertNil(find.textView)
     }
 
+    func testTypingWithFindClosedOrEmptyDoesNotPublishSearchRefreshes() {
+        withPlain("ordinary text") { find, view in
+            var updates = 0
+            let observer = find.objectWillChange.sink { updates += 1 }
+            view.insertText("X", replacementRange: NSRange(location: 0, length: 0))
+            settle()
+            XCTAssertEqual(updates, 0)
+            find.open()
+            updates = 0
+            view.insertText("Y", replacementRange: NSRange(location: 0, length: 0))
+            settle()
+            XCTAssertEqual(updates, 0)
+            withExtendedLifetime(observer) {}
+        }
+    }
+
     func testShortcutsRequireExactModifiersAndEscapeClosesFindFirst() {
         withPlain("one one") { find, _ in
             func key(_ code: UInt16, _ flags: NSEvent.ModifierFlags) -> NSEvent {
                 NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
-                                 windowNumber: 0, context: nil, characters: "", charactersIgnoringModifiers: "",
+                                 windowNumber: 0, context: nil, characters: code == 3 ? "f" : "g", charactersIgnoringModifiers: code == 3 ? "f" : "g",
                                  isARepeat: false, keyCode: code)!
             }
             XCTAssertFalse(find.handleKey(key(3, [.command, .option])))
@@ -125,6 +141,14 @@ final class NoteFindTests: XCTestCase {
             XCTAssertTrue(find.handleKey(key(53, [])))
             XCTAssertFalse(find.isVisible)
             XCTAssertFalse(find.handleKey(key(53, [])))
+            let remapped = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .control, timestamp: 0,
+                                            windowNumber: 0, context: nil, characters: "f", charactersIgnoringModifiers: "f",
+                                            isARepeat: false, keyCode: 32)!
+            XCTAssertTrue(find.handleKey(remapped))
+            let physicalF = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .control, timestamp: 0,
+                                             windowNumber: 0, context: nil, characters: "u", charactersIgnoringModifiers: "u",
+                                             isARepeat: false, keyCode: 3)!
+            XCTAssertFalse(find.handleKey(physicalF))
         }
     }
 
@@ -169,6 +193,24 @@ final class NoteFindTests: XCTestCase {
         }
     }
 
+    func testMarkdownEditRefreshDoesNotReturnToFirstMatch() throws {
+        let source = "Start target.\n\n" + String(repeating: "Following paragraph.\n\n", count: 100)
+        try withMarkdown(source) { find, view in
+            find.open()
+            find.setQuery("target")
+            settle()
+            view.setSelectedRange(NSRange(location: (view.string as NSString).length, length: 0))
+            view.scrollRangeToVisible(view.selectedRange())
+            view.insertText("target", replacementRange: view.selectedRange())
+            let selection = view.selectedRange()
+            let origin = view.enclosingScrollView!.contentView.bounds.origin
+            settle()
+            XCTAssertEqual(find.matches.count, 2)
+            XCTAssertEqual(view.selectedRange(), selection)
+            XCTAssertEqual(view.enclosingScrollView!.contentView.bounds.origin, origin)
+        }
+    }
+
     func testMarkdownRenderingHighlightsSurviveLayoutWithoutChangingCodeBackground() throws {
         let source = "Start\n\n```swift\nlet target = 1\n```\n\nEnd target.\n"
         try withMarkdown(source) { find, view in
@@ -190,6 +232,31 @@ final class NoteFindTests: XCTestCase {
             XCTAssertGreaterThan(backgrounds, 0)
             find.close()
             XCTAssertEqual(view.textStorage?.attribute(.backgroundColor, at: offset, effectiveRange: nil) as? NSColor, before)
+        }
+    }
+
+    func testMarkdownQueryChangesAndCloseClearEarlierHighlights() throws {
+        try withMarkdown("Start target\n\n```swift\nlet target = 1\n```\n\nEnd target.\n") { find, view in
+            find.open()
+            for query in ["t", "ta", "tar", "target"] { find.setQuery(query); settle() }
+            let layout = try XCTUnwrap(view.textLayoutManager)
+            func highlightedOffsets() -> Set<Int> {
+                var offsets: Set<Int> = []
+                layout.enumerateRenderingAttributes(from: layout.documentRange.location, reverse: false) { _, attrs, range in
+                    if attrs[.backgroundColor] != nil, let content = layout.textContentManager {
+                        let start = content.offset(from: layout.documentRange.location, to: range.location)
+                        let end = content.offset(from: layout.documentRange.location, to: range.endLocation)
+                        offsets.formUnion(start..<end)
+                    }
+                    return true
+                }
+                return offsets
+            }
+            let expected = Set(find.matches.flatMap { Array($0.location..<NSMaxRange($0)) })
+            XCTAssertEqual(highlightedOffsets(), expected)
+            find.close()
+            settle()
+            XCTAssertTrue(highlightedOffsets().isEmpty)
         }
     }
 

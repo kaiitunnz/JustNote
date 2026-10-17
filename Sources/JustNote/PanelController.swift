@@ -59,6 +59,8 @@ final class FloatingPanel: NSPanel {
 /// anchor.
 @MainActor
 final class PanelController: NSObject {
+    let find = NoteFindController()
+
     private let panel: FloatingPanel
     private let dragHandle: PanelDragHandle
     private var dragHandleHeightConstraint: NSLayoutConstraint?
@@ -130,7 +132,7 @@ final class PanelController: NSObject {
         effectView.layer?.cornerRadius = Theme.corner
         effectView.layer?.masksToBounds = true
 
-        let hostingView = NSHostingView(rootView: MenuView(model: model))
+        let hostingView = NSHostingView(rootView: MenuView(model: model, find: find))
         hostingView.safeAreaRegions = []
         hostingView.translatesAutoresizingMaskIntoConstraints = false
         effectView.addSubview(hostingView)
@@ -185,6 +187,16 @@ final class PanelController: NSObject {
 
     func close() {
         if panel.isVisible { panel.close() }
+    }
+
+    func showFind() {
+        guard panel.isKeyWindow else { return }
+        find.open()
+    }
+
+    func moveFind(backward: Bool = false) {
+        guard panel.isKeyWindow else { return }
+        find.move(backward: backward)
     }
 
     /// Run `work` with resign-key dismissal suppressed, so an app-modal alert opened from the panel
@@ -310,12 +322,16 @@ final class PanelController: NSObject {
     private func installEscapeMonitor() {
         guard escapeMonitor == nil else { return }
         escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, event.keyCode == 53, event.window == self.panel else { return event }
+            guard let self, event.window == self.panel else { return event }
             if let textView = self.panel.firstResponder as? NSTextView, textView.hasMarkedText() {
                 return event
             }
-            self.close()
-            return nil
+            if self.find.handleKey(event) { return nil }
+            if event.keyCode == 53 {
+                self.close()
+                return nil
+            }
+            return event
         }
     }
 
@@ -421,6 +437,7 @@ extension PanelController: NSWindowDelegate {
 
     /// Single teardown point for the event monitors, robust to every close path.
     func windowWillClose(_ notification: Notification) {
+        find.close(refocus: false)
         removeEscapeMonitor()
         endPanelDrag()
     }

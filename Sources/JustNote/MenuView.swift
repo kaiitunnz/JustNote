@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 struct MenuView: View {
     @ObservedObject var model: AppModel
+    @ObservedObject var find: NoteFindController
     @AppStorage("sidebarWidth") private var sidebarWidth = Double(Theme.sidebarWidth)
     @AppStorage("wrapLines") private var wrapLines = true
     // Placeholder default; init runs the real preference migration and overwrites it.
@@ -18,8 +19,9 @@ struct MenuView: View {
     @State private var wrapIcon: String?
     @State private var wrapToken = 0
 
-    init(model: AppModel) {
+    init(model: AppModel, find: NoteFindController) {
         self.model = model
+        self.find = find
         _editorModeRaw = AppStorage(wrappedValue: EditorModePreference.initialValue(defaults: .standard), "editorMode")
     }
 
@@ -45,8 +47,9 @@ struct MenuView: View {
         .overlay(alignment: .center) { wrapIndicator }
         .tint(Theme.accent)
         .containerBackground(.thinMaterial, for: .window)
-        .onAppear { EditorCommandRouter.shared.setMode(editorMode) }
-        .onChange(of: editorModeRaw) { _, _ in EditorCommandRouter.shared.setMode(editorMode) }
+        .onAppear { updateEditorScope() }
+        .onChange(of: editorModeRaw) { _, _ in updateEditorScope() }
+        .onChange(of: model.selectedNoteID) { _, _ in updateEditorScope() }
         .alert("Uninstall JustNote?", isPresented: $showingUninstallConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("Uninstall", role: .destructive, action: model.uninstallAndQuit)
@@ -335,6 +338,12 @@ struct MenuView: View {
                         TimestampText(date: note.updatedAt)
                     }
                     Spacer()
+                    Button { find.open() } label: {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .buttonStyle(HeaderIconButtonStyle())
+                    .help("Find in note (⌘F or Ctrl+F)")
                     if editorMode == .plainText {
                         Button {
                             wrapLines.toggle()
@@ -363,7 +372,8 @@ struct MenuView: View {
                             documentID: note.id,
                             retainedDocumentIDs: Set(model.notes.map(\.id)),
                             fontSize: fontSize,
-                            onInteract: { model.collapseSelectionToPrimary() }
+                            onInteract: { model.collapseSelectionToPrimary() },
+                            onRegister: { find.bind($0, noteID: note.id, mode: .markdown) }
                         )
                         .contentShape(Rectangle())
                     } else {
@@ -372,7 +382,8 @@ struct MenuView: View {
                             wrapsLines: wrapLines,
                             fontSize: fontSize,
                             // NSTextView eats clicks at the AppKit layer, so it collapses from its own mouseDown.
-                            onInteract: { model.collapseSelectionToPrimary() }
+                            onInteract: { model.collapseSelectionToPrimary() },
+                            onRegister: { find.bind($0, noteID: note.id, mode: .plainText) }
                         )
                         .contentShape(Rectangle())
                         .onTapGesture { }  // Swallows editor taps so they don't fall through to the background collapse below.
@@ -380,6 +391,7 @@ struct MenuView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentSurface(cornerRadius: Theme.innerCorner)
+                .modifier(NoteFindOverlay(find: find))
             } else {
                 VStack(spacing: 12) {
                     Image(systemName: "note.text.badge.plus")
@@ -632,6 +644,11 @@ struct MenuView: View {
     private var editorMode: EditorMode {
         get { EditorMode(rawValue: editorModeRaw) ?? .markdown }
         nonmutating set { editorModeRaw = newValue.rawValue }
+    }
+
+    private func updateEditorScope() {
+        EditorCommandRouter.shared.setMode(editorMode)
+        find.setScope(noteID: model.selectedNoteID, mode: editorMode)
     }
 
     // Sanitize on read too, so a persisted value below the correctness floor never reaches the editors.

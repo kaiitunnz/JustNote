@@ -31,6 +31,11 @@ final class NoteFindController: ObservableObject {
     private var changeObserver: NSObjectProtocol?
     private var previousValidator: ((NSTextLayoutManager, NSTextLayoutFragment) -> Void)?
     private var revision = 0
+    private var isClearingHighlights = false
+    private var hasHighlights = false
+    var overlaySize: CGSize = .zero
+    private var originalTopInset: CGFloat?
+    private weak var searchField: NSTextField?
 
     deinit {
         if let changeObserver { NotificationCenter.default.removeObserver(changeObserver) }
@@ -42,12 +47,13 @@ final class NoteFindController: ObservableObject {
 
     func handleKey(_ event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
-        if event.keyCode == 3, flags == .command || flags == .control {
+        let character = event.charactersIgnoringModifiers?.lowercased()
+        if character == "f", flags == .command || flags == .control {
             guard noteID != nil else { return false }
             open()
             return true
         }
-        if event.keyCode == 5, flags == .command || flags == [.command, .shift] {
+        if character == "g", flags == .command || flags == [.command, .shift] {
             guard noteID != nil else { return false }
             move(backward: flags.contains(.shift))
             return true
@@ -75,8 +81,10 @@ final class NoteFindController: ObservableObject {
         if let layout = view.textLayoutManager {
             previousValidator = layout.renderingAttributesValidator
             layout.renderingAttributesValidator = { [weak self] layout, fragment in
-                self?.previousValidator?(layout, fragment)
-                self?.applyHighlights(in: fragment.rangeInElement)
+                guard let self, !self.isClearingHighlights else { return }
+                self.previousValidator?(layout, fragment)
+                layout.removeRenderingAttribute(.backgroundColor, for: fragment.rangeInElement)
+                self.applyHighlights(in: fragment.rangeInElement)
             }
         }
         changeObserver = NotificationCenter.default.addObserver(
@@ -90,9 +98,16 @@ final class NoteFindController: ObservableObject {
     func open() {
         guard noteID != nil else { return }
         isVisible = true
-        focusRequest += 1
         refresh(reveal: true)
+        if let searchField, let window = searchField.window, window.makeFirstResponder(searchField) {
+            searchField.stringValue = query
+            searchField.selectText(nil)
+        } else {
+            focusRequest += 1
+        }
     }
+
+    func registerSearchField(_ field: NSTextField) { searchField = field }
 
     func close(refocus: Bool = true) {
         revision += 1
@@ -101,6 +116,7 @@ final class NoteFindController: ObservableObject {
         matches = []
         currentIndex = 0
         isVisible = false
+        restoreTopInset()
         if refocus, let textView { textView.window?.makeFirstResponder(textView) }
     }
 
@@ -121,6 +137,7 @@ final class NoteFindController: ObservableObject {
     func detach() {
         revision += 1
         clearHighlights()
+        restoreTopInset()
         if let changeObserver { NotificationCenter.default.removeObserver(changeObserver) }
         changeObserver = nil
         textView?.textLayoutManager?.renderingAttributesValidator = previousValidator
@@ -131,6 +148,7 @@ final class NoteFindController: ObservableObject {
     }
 
     private func scheduleRefresh() {
+        guard isVisible, !query.isEmpty else { return }
         revision += 1
         let expected = revision
         DispatchQueue.main.async { [weak self] in
@@ -194,11 +212,32 @@ final class NoteFindController: ObservableObject {
         else if rect.maxY > clip.bounds.maxY - margin { origin.y = rect.maxY - clip.bounds.height + margin }
         if rect.minX < clip.bounds.minX + margin { origin.x = rect.minX - margin }
         else if rect.maxX > clip.bounds.maxX - margin { origin.x = rect.maxX - clip.bounds.width + margin }
+        let overlayBottom = overlaySize.height + 16
+        if overlaySize.width > 0, rect.maxX > origin.x + clip.bounds.width - overlaySize.width - 16,
+           rect.minY < origin.y + overlayBottom {
+            if originalTopInset == nil { originalTopInset = scroll.contentInsets.top }
+            var insets = scroll.contentInsets
+            insets.top = max(insets.top, overlayBottom)
+            scroll.contentInsets = insets
+            origin.y = rect.minY - overlayBottom
+        }
         let bounds = scroll.documentView?.bounds ?? view.bounds
         origin.x = min(max(bounds.minX, origin.x), max(bounds.minX, bounds.maxX - clip.bounds.width))
-        origin.y = min(max(bounds.minY, origin.y), max(bounds.minY, bounds.maxY - clip.bounds.height))
+        origin.y = min(max(bounds.minY - scroll.contentInsets.top, origin.y), max(bounds.minY, bounds.maxY - clip.bounds.height))
         clip.scroll(to: origin)
         scroll.reflectScrolledClipView(clip)
+    }
+
+    private func restoreTopInset() {
+        guard let originalTopInset else { return }
+        self.originalTopInset = nil
+        guard let scroll = textView?.enclosingScrollView else { return }
+        let origin = scroll.contentView.bounds.origin
+        var insets = scroll.contentInsets
+        insets.top = originalTopInset
+        scroll.contentInsets = insets
+        scroll.contentView.scroll(to: NSPoint(x: origin.x, y: max(-originalTopInset, origin.y)))
+        scroll.reflectScrolledClipView(scroll.contentView)
     }
 
     private func textRange(_ range: NSRange, in layout: NSTextLayoutManager) -> NSTextRange? {
@@ -209,9 +248,15 @@ final class NoteFindController: ObservableObject {
     }
 
     private func clearHighlights() {
+        guard hasHighlights else { return }
+        hasHighlights = false
         guard let view = textView else { return }
+        isClearingHighlights = true
+        defer { isClearingHighlights = false }
         if let layout = view.textLayoutManager {
             layout.removeRenderingAttribute(.backgroundColor, for: layout.documentRange)
+            layout.invalidateRenderingAttributes(for: layout.documentRange)
+            layout.textViewportLayoutController.layoutViewport()
         } else {
             view.layoutManager?.removeTemporaryAttribute(.backgroundColor, forCharacterRange: NSRange(location: 0, length: (view.string as NSString).length))
         }
@@ -220,6 +265,7 @@ final class NoteFindController: ObservableObject {
 
     private func applyHighlights(in fragment: NSTextRange? = nil) {
         guard isVisible, let view = textView else { return }
+        if !matches.isEmpty { hasHighlights = true }
         for (index, range) in matches.enumerated() {
             guard NSMaxRange(range) <= (view.string as NSString).length else { continue }
             let color = index == currentIndex ? NSColor.systemOrange.withAlphaComponent(0.65) : NSColor.systemYellow.withAlphaComponent(0.4)
@@ -230,6 +276,9 @@ final class NoteFindController: ObservableObject {
                 view.layoutManager?.addTemporaryAttribute(.backgroundColor, value: color, forCharacterRange: range)
             }
         }
-        if fragment == nil { view.needsDisplay = true }
+        if fragment == nil {
+            view.textLayoutManager?.textViewportLayoutController.layoutViewport()
+            view.needsDisplay = true
+        }
     }
 }

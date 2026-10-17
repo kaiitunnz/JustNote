@@ -69,6 +69,9 @@ private struct FixedShortcut: Identifiable {
         FixedShortcut(action: "Select all notes", keys: "⌘⌥A"),
         FixedShortcut(action: "Show or hide sidebar", keys: "⌘⇧E"),
         FixedShortcut(action: "Switch Plain Text / Markdown mode", keys: "⌘⇧V"),
+        FixedShortcut(action: "Find in note", keys: "⌘F / ⌃F"),
+        FixedShortcut(action: "Next / previous match", keys: "⌘G / ⌘⇧G"),
+        FixedShortcut(action: "Close Find, then hide panel", keys: "Esc"),
         FixedShortcut(action: "Toggle soft wrap", keys: "⌘⌥W"),
         FixedShortcut(action: "Reveal notes folder", keys: "⌘⇧R"),
     ]
