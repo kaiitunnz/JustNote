@@ -28,7 +28,7 @@ packages:
   MarkdownEngine:
     url: https://github.com/kaiitunnz/swift-markdown-engine.git
     # Table viewport and list editing patches on 0.10.0; keep editor behavior reproducible.
-    revision: cc7ba1daac4d655c91ba08c5b3c1384f32b71a1a
+    revision: 8873866596983b8a5220b975b8133bdf4441f48d
   KeyboardShortcuts:
     url: https://github.com/sindresorhus/KeyboardShortcuts.git
     # Exact-version pin (the .xcodeproj — and its Package.resolved — is git-ignored, so a
