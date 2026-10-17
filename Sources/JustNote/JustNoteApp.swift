@@ -24,6 +24,13 @@ struct JustNoteApp: App {
                 .keyboardShortcut(",", modifiers: .command)
             }
             CommandGroup(after: .textEditing) {
+                Button("Find in Note…") { AppDelegate.shared?.panelController?.showFind() }
+                    .keyboardShortcut("f", modifiers: .command)
+                Button("Find Next") { AppDelegate.shared?.panelController?.moveFind() }
+                    .keyboardShortcut("g", modifiers: .command)
+                Button("Find Previous") { AppDelegate.shared?.panelController?.moveFind(backward: true) }
+                    .keyboardShortcut("g", modifiers: [.command, .shift])
+                Divider()
                 ForEach(EditorFormattingAction.allCases, id: \.self) { action in
                     Button(action.title) {
                         EditorCommandRouter.shared.perform(

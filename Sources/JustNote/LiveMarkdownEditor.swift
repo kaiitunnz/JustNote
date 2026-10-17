@@ -9,6 +9,8 @@ struct LiveMarkdownEditor: View {
     let retainedDocumentIDs: Set<UUID>
     let fontSize: CGFloat
     var onInteract: (() -> Void)?
+    var onRegister: ((NSTextView) -> Void)?
+    var isInteractionExcluded: ((CGPoint) -> Bool)?
     @State private var codeBlocks: [CodeBlockSelection] = []
     @State private var copiedCodeBlockID: Int?
     @State private var hoveredCodeBlockID: Int?
@@ -35,7 +37,7 @@ struct LiveMarkdownEditor: View {
                 onCodeBlockSelectionChange: { codeBlocks = $0 },
                 retainedScrollDocumentIds: Set(retainedDocumentIDs.map(\.uuidString))
             )
-            .background(MarkdownInteractionMonitor(documentText: text, onInteract: onInteract))
+            .background(MarkdownInteractionMonitor(documentText: text, onInteract: onInteract, isExcluded: isInteractionExcluded))
             .background(MarkdownSemanticColorizer(documentText: text))
 
             ForEach(codeBlocks) { selection in
@@ -62,7 +64,7 @@ struct LiveMarkdownEditor: View {
             }
         }
         .background(MarkdownCodeBlockHoverMonitor(codeBlocks: codeBlocks, hoveredCodeBlockID: $hoveredCodeBlockID))
-        .background(EditorTextViewRegistration(documentText: text))
+        .background(EditorTextViewRegistration(documentText: text, onRegister: onRegister))
     }
 
     private var configuration: MarkdownEditorConfiguration {
@@ -364,11 +366,8 @@ private final class MarkdownSemanticColorizerView: NSView {
     }
 
     private func matchingTextView() -> NSTextView? {
-        let normalizedDocumentText = documentText.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
-        let textViews = window?.contentView?.textViews ?? []
-        return textViews.first {
-            $0.string.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n") == normalizedDocumentText
-        } ?? (window?.firstResponder as? NSTextView) ?? textViews.first
+        guard let root = window?.contentView else { return nil }
+        return MarkdownEditorDiscovery.editor(in: root, documentText: documentText)
     }
 }
 
@@ -399,14 +398,16 @@ enum MarkdownParagraphGapHitTest {
 private struct MarkdownInteractionMonitor: NSViewRepresentable {
     let documentText: String
     var onInteract: (() -> Void)?
+    var isExcluded: ((CGPoint) -> Bool)?
 
     func makeNSView(context: Context) -> MarkdownInteractionMonitorView {
-        MarkdownInteractionMonitorView(documentText: documentText, onInteract: onInteract)
+        MarkdownInteractionMonitorView(documentText: documentText, onInteract: onInteract, isExcluded: isExcluded)
     }
 
     func updateNSView(_ view: MarkdownInteractionMonitorView, context: Context) {
         view.documentText = documentText
         view.onInteract = onInteract
+        view.isExcluded = isExcluded
     }
 
     static func dismantleNSView(_ view: MarkdownInteractionMonitorView, coordinator: ()) {
@@ -417,11 +418,13 @@ private struct MarkdownInteractionMonitor: NSViewRepresentable {
 private final class MarkdownInteractionMonitorView: NSView {
     var documentText: String
     var onInteract: (() -> Void)?
+    var isExcluded: ((CGPoint) -> Bool)?
     private var eventMonitor: Any?
 
-    init(documentText: String, onInteract: (() -> Void)?) {
+    init(documentText: String, onInteract: (() -> Void)?, isExcluded: ((CGPoint) -> Bool)?) {
         self.documentText = documentText
         self.onInteract = onInteract
+        self.isExcluded = isExcluded
         super.init(frame: .zero)
     }
 
@@ -460,16 +463,14 @@ private final class MarkdownInteractionMonitorView: NSView {
 
     private func markdownTextView(containing event: NSEvent) -> NSTextView? {
         guard
+            event.window === window,
+            isExcluded?(event.locationInWindow) != true,
             let rootView = window?.contentView,
-            let textView = rootView.textViews.first(where: matchesDocument),
+            let textView = MarkdownEditorDiscovery.editor(in: rootView, documentText: documentText),
             let scrollView = textView.enclosingScrollView
         else { return nil }
         let location = scrollView.convert(event.locationInWindow, from: nil)
         return scrollView.bounds.contains(location) ? textView : nil
-    }
-
-    private func matchesDocument(_ textView: NSTextView) -> Bool {
-        normalized(textView.string) == normalized(documentText)
     }
 
     private func placeCaretInParagraphGap(for event: NSEvent, textView: NSTextView) -> Bool {
@@ -489,9 +490,6 @@ private final class MarkdownInteractionMonitorView: NSView {
         return true
     }
 
-    private func normalized(_ text: String) -> String {
-        text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
-    }
 }
 
 extension NSView {

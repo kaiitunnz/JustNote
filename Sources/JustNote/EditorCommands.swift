@@ -194,12 +194,13 @@ final class EditorCommandRouter {
     }
 
     func register(_ textView: NSTextView) {
+        guard !textView.isFieldEditor else { return }
         lastEditor = textView
     }
 
     func editor(requiresFocus: Bool = false) -> NSTextView? {
-        if let firstResponder = NSApp.keyWindow?.firstResponder as? NSTextView, firstResponder.isEditable {
-            lastEditor = firstResponder
+        if let firstResponder = NSApp.keyWindow?.firstResponder as? NSTextView,
+           firstResponder === lastEditor, !firstResponder.isFieldEditor, firstResponder.isEditable {
             return firstResponder
         }
         guard !requiresFocus,
@@ -226,18 +227,23 @@ final class EditorCommandRouter {
 
 struct EditorTextViewRegistration: NSViewRepresentable {
     let documentText: String
+    var onRegister: ((NSTextView) -> Void)?
 
     func makeNSView(context: Context) -> RegistrationView {
-        RegistrationView(documentText: documentText)
+        let view = RegistrationView(documentText: documentText)
+        view.onRegister = onRegister
+        return view
     }
 
     func updateNSView(_ view: RegistrationView, context: Context) {
         view.documentText = documentText
+        view.onRegister = onRegister
         view.registerEditor()
     }
 
     final class RegistrationView: NSView {
         var documentText: String
+        var onRegister: ((NSTextView) -> Void)?
 
         init(documentText: String) {
             self.documentText = documentText
@@ -257,16 +263,25 @@ struct EditorTextViewRegistration: NSViewRepresentable {
             guard window != nil else { return }
             DispatchQueue.main.async { [weak self] in
                 guard let self, let rootView = self.window?.contentView else { return }
-                let normalizedText = Self.normalized(self.documentText)
-                if let textView = rootView.textViews.first(where: { Self.normalized($0.string) == normalizedText }) {
+                if let textView = MarkdownEditorDiscovery.editor(in: rootView, documentText: self.documentText) {
                     EditorCommandRouter.shared.register(textView)
+                    self.onRegister?(textView)
                 }
             }
         }
+    }
+}
 
-        private static func normalized(_ text: String) -> String {
-            text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
-        }
+enum MarkdownEditorDiscovery {
+    static func editor(in root: NSView, documentText: String) -> NSTextView? {
+        let candidates = root.textViews.filter { !$0.isFieldEditor && $0.isEditable && !($0 is EndAnchoredTextView) }
+        let normalized = normalize(documentText)
+        // Wiki-link storage IDs are absent from the engine's displayed text.
+        return candidates.first { normalize($0.string) == normalized } ?? (candidates.count == 1 ? candidates.first : nil)
+    }
+
+    private static func normalize(_ text: String) -> String {
+        text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
     }
 }
 

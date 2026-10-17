@@ -6,6 +6,7 @@ struct PlainTextEditor: NSViewRepresentable {
     let wrapsLines: Bool
     let fontSize: CGFloat
     var onInteract: (() -> Void)?
+    var onRegister: ((NSTextView) -> Void)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(text: $text)
@@ -38,6 +39,7 @@ struct PlainTextEditor: NSViewRepresentable {
 
         scrollView.documentView = textView
         configure(textView: textView, in: scrollView)
+        DispatchQueue.main.async { onRegister?(textView) }
         return scrollView
     }
 
@@ -64,6 +66,7 @@ struct PlainTextEditor: NSViewRepresentable {
             textView.sizeToFit()
             scrollView.contentView.scroll(to: .zero)
         }
+        DispatchQueue.main.async { onRegister?(textView) }
     }
 
     private func configure(textView: EndAnchoredTextView, in scrollView: NSScrollView) {
@@ -192,7 +195,7 @@ final class EndAnchoredTextView: NSTextView {
         if frame.origin != .zero { super.setFrameOrigin(.zero) }
         let clip = scroll.contentView
         let origin = NSPoint(x: max(0, min(savedOrigin.x, frame.width - clip.bounds.width)),
-                             y: max(0, min(savedOrigin.y, frame.height - clip.bounds.height)))
+                             y: max(-scroll.contentInsets.top, min(savedOrigin.y, frame.height - clip.bounds.height)))
         if origin != clip.bounds.origin {
             clip.scroll(to: origin)
             scroll.reflectScrolledClipView(clip)
