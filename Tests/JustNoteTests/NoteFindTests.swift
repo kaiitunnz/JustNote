@@ -189,6 +189,8 @@ final class NoteFindTests: XCTestCase {
             let scroll = try XCTUnwrap(view.enclosingScrollView)
             XCTAssertTrue(scroll.contentView.bounds.intersects(rect))
             XCTAssertGreaterThan(scroll.contentView.bounds.minY, 500)
+            let highlights = try XCTUnwrap(view.subviews.compactMap { $0 as? NoteFindHighlightsView }.first)
+            XCTAssertTrue(highlights.visibleMarks().contains { $0.range == range })
             XCTAssertEqual(view.string, source)
         }
     }
@@ -211,7 +213,7 @@ final class NoteFindTests: XCTestCase {
         }
     }
 
-    func testMarkdownRenderingHighlightsSurviveLayoutWithoutChangingCodeBackground() throws {
+    func testMarkdownHighlightsSurviveLayoutWithoutChangingCodeBackground() throws {
         let source = "Start\n\n```swift\nlet target = 1\n```\n\nEnd target.\n"
         try withMarkdown(source) { find, view in
             let offset = (source as NSString).range(of: "let target").location
@@ -224,12 +226,8 @@ final class NoteFindTests: XCTestCase {
             layout.invalidateLayout(for: layout.documentRange)
             layout.ensureLayout(for: layout.documentRange)
             view.displayIfNeeded()
-            var backgrounds = 0
-            layout.enumerateRenderingAttributes(from: layout.documentRange.location, reverse: false) { _, attrs, _ in
-                if attrs[.backgroundColor] != nil { backgrounds += 1 }
-                return true
-            }
-            XCTAssertGreaterThan(backgrounds, 0)
+            let highlights = try XCTUnwrap(view.subviews.compactMap { $0 as? NoteFindHighlightsView }.first)
+            XCTAssertFalse(highlights.visibleMarks().isEmpty)
             find.close()
             XCTAssertEqual(view.textStorage?.attribute(.backgroundColor, at: offset, effectiveRange: nil) as? NSColor, before)
         }
@@ -239,24 +237,25 @@ final class NoteFindTests: XCTestCase {
         try withMarkdown("Start target\n\n```swift\nlet target = 1\n```\n\nEnd target.\n") { find, view in
             find.open()
             for query in ["t", "ta", "tar", "target"] { find.setQuery(query); settle() }
-            let layout = try XCTUnwrap(view.textLayoutManager)
-            func highlightedOffsets() -> Set<Int> {
-                var offsets: Set<Int> = []
-                layout.enumerateRenderingAttributes(from: layout.documentRange.location, reverse: false) { _, attrs, range in
-                    if attrs[.backgroundColor] != nil, let content = layout.textContentManager {
-                        let start = content.offset(from: layout.documentRange.location, to: range.location)
-                        let end = content.offset(from: layout.documentRange.location, to: range.endLocation)
-                        offsets.formUnion(start..<end)
-                    }
-                    return true
+            let highlights = try XCTUnwrap(view.subviews.compactMap { $0 as? NoteFindHighlightsView }.first)
+            let marks = highlights.visibleMarks()
+            XCTAssertEqual(Set(marks.map(\.range)), Set(find.matches))
+            let bitmap = try XCTUnwrap(highlights.bitmapImageRepForCachingDisplay(in: highlights.bounds))
+            highlights.cacheDisplay(in: highlights.bounds, to: bitmap)
+            let scale = CGFloat(bitmap.pixelsWide) / highlights.bounds.width
+            for mark in marks {
+                XCTAssertGreaterThan(mark.rect.width, 20)
+                for x in [mark.rect.minX + 2, mark.rect.maxX - 2] {
+                    let color = try XCTUnwrap(bitmap.colorAt(x: Int(x * scale), y: Int(mark.rect.midY * scale)))
+                    XCTAssertGreaterThan(color.alphaComponent, 0.1)
                 }
-                return offsets
             }
-            let expected = Set(find.matches.flatMap { Array($0.location..<NSMaxRange($0)) })
-            XCTAssertEqual(highlightedOffsets(), expected)
             find.close()
             settle()
-            XCTAssertTrue(highlightedOffsets().isEmpty)
+            XCTAssertTrue(highlights.isHidden)
+            XCTAssertTrue(highlights.visibleMarks().isEmpty)
+            find.detach()
+            XCTAssertFalse(view.subviews.contains { $0 is NoteFindHighlightsView })
         }
     }
 

@@ -29,13 +29,13 @@ final class NoteFindController: ObservableObject {
     private var noteID: UUID?
     private var mode: EditorMode = .markdown
     private var changeObserver: NSObjectProtocol?
-    private var previousValidator: ((NSTextLayoutManager, NSTextLayoutFragment) -> Void)?
+    private var highlightsView: NoteFindHighlightsView?
     private var revision = 0
-    private var isClearingHighlights = false
     private var hasHighlights = false
     var overlaySize: CGSize = .zero
     private var originalTopInset: CGFloat?
     private weak var searchField: NSTextField?
+    private weak var overlayView: NSView?
 
     deinit {
         if let changeObserver { NotificationCenter.default.removeObserver(changeObserver) }
@@ -78,15 +78,6 @@ final class NoteFindController: ObservableObject {
         guard textView !== view else { return }
         detach()
         textView = view
-        if let layout = view.textLayoutManager {
-            previousValidator = layout.renderingAttributesValidator
-            layout.renderingAttributesValidator = { [weak self] layout, fragment in
-                guard let self, !self.isClearingHighlights else { return }
-                self.previousValidator?(layout, fragment)
-                layout.removeRenderingAttribute(.backgroundColor, for: fragment.rangeInElement)
-                self.applyHighlights(in: fragment.rangeInElement)
-            }
-        }
         changeObserver = NotificationCenter.default.addObserver(
             forName: NSText.didChangeNotification, object: view, queue: .main
         ) { [weak self] _ in
@@ -108,6 +99,19 @@ final class NoteFindController: ObservableObject {
     }
 
     func registerSearchField(_ field: NSTextField) { searchField = field }
+
+    func registerOverlay(_ view: NSView) { overlayView = view }
+
+    func containsOverlay(_ windowPoint: CGPoint) -> Bool {
+        guard isVisible, let overlayView, overlayView.window != nil else { return false }
+        return overlayView.bounds.contains(overlayView.convert(windowPoint, from: nil))
+    }
+
+    func excludesEditorCursor(at windowPoint: CGPoint) -> Bool {
+        guard containsOverlay(windowPoint) else { return false }
+        guard let searchField else { return true }
+        return !searchField.bounds.contains(searchField.convert(windowPoint, from: nil))
+    }
 
     func close(refocus: Bool = true) {
         revision += 1
@@ -136,12 +140,13 @@ final class NoteFindController: ObservableObject {
 
     func detach() {
         revision += 1
+        matches = []
         clearHighlights()
         restoreTopInset()
         if let changeObserver { NotificationCenter.default.removeObserver(changeObserver) }
         changeObserver = nil
-        textView?.textLayoutManager?.renderingAttributesValidator = previousValidator
-        previousValidator = nil
+        highlightsView?.removeFromSuperview()
+        highlightsView = nil
         textView = nil
         matches = []
         currentIndex = 0
@@ -162,7 +167,7 @@ final class NoteFindController: ObservableObject {
         clearHighlights()
         matches = isVisible ? NoteFindMatcher.ranges(of: query, in: textView?.string ?? "") : []
         currentIndex = min(currentIndex, max(0, matches.count - 1))
-        if reveal { revealCurrentMatch() } else { applyHighlights() }
+        if reveal, !matches.isEmpty { revealCurrentMatch() } else { applyHighlights() }
     }
 
     private func revealCurrentMatch() {
@@ -248,37 +253,25 @@ final class NoteFindController: ObservableObject {
     }
 
     private func clearHighlights() {
+        highlightsView?.update(matches: [], currentIndex: 0)
         guard hasHighlights else { return }
         hasHighlights = false
-        guard let view = textView else { return }
-        isClearingHighlights = true
-        defer { isClearingHighlights = false }
-        if let layout = view.textLayoutManager {
-            layout.removeRenderingAttribute(.backgroundColor, for: layout.documentRange)
-            layout.invalidateRenderingAttributes(for: layout.documentRange)
-            layout.textViewportLayoutController.layoutViewport()
-        } else {
-            view.layoutManager?.removeTemporaryAttribute(.backgroundColor, forCharacterRange: NSRange(location: 0, length: (view.string as NSString).length))
-        }
-        view.needsDisplay = true
+        guard let view = textView, view.textLayoutManager == nil else { return }
+        view.layoutManager?.removeTemporaryAttribute(.backgroundColor, forCharacterRange: NSRange(location: 0, length: (view.string as NSString).length))
     }
 
-    private func applyHighlights(in fragment: NSTextRange? = nil) {
+    private func applyHighlights() {
         guard isVisible, let view = textView else { return }
-        if !matches.isEmpty { hasHighlights = true }
-        for (index, range) in matches.enumerated() {
-            guard NSMaxRange(range) <= (view.string as NSString).length else { continue }
-            let color = index == currentIndex ? NSColor.systemOrange.withAlphaComponent(0.65) : NSColor.systemYellow.withAlphaComponent(0.4)
-            if let layout = view.textLayoutManager, let textRange = textRange(range, in: layout) {
-                let target = fragment.flatMap { textRange.intersection($0) } ?? (fragment == nil ? textRange : nil)
-                if let target { layout.addRenderingAttribute(.backgroundColor, value: color, for: target) }
-            } else {
+        if view.textLayoutManager != nil {
+            if highlightsView == nil { highlightsView = NoteFindHighlightsView(textView: view) }
+            highlightsView?.update(matches: matches, currentIndex: currentIndex)
+        } else {
+            hasHighlights = !matches.isEmpty
+            for (index, range) in matches.enumerated() {
+                guard NSMaxRange(range) <= (view.string as NSString).length else { continue }
+                let color = index == currentIndex ? NSColor.systemOrange.withAlphaComponent(0.65) : NSColor.systemYellow.withAlphaComponent(0.4)
                 view.layoutManager?.addTemporaryAttribute(.backgroundColor, value: color, forCharacterRange: range)
             }
-        }
-        if fragment == nil {
-            view.textLayoutManager?.textViewportLayoutController.layoutViewport()
-            view.needsDisplay = true
         }
     }
 }

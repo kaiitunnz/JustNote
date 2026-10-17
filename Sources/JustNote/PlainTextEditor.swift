@@ -7,6 +7,7 @@ struct PlainTextEditor: NSViewRepresentable {
     let fontSize: CGFloat
     var onInteract: (() -> Void)?
     var onRegister: ((NSTextView) -> Void)?
+    var isCursorExcluded: ((CGPoint) -> Bool)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(text: $text)
@@ -22,6 +23,7 @@ struct PlainTextEditor: NSViewRepresentable {
         let textView = EndAnchoredTextView(frame: .zero)
         textView.delegate = context.coordinator
         textView.onInteract = onInteract
+        textView.isCursorExcluded = isCursorExcluded
         textView.string = text
         textView.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         textView.textColor = .labelColor
@@ -47,6 +49,7 @@ struct PlainTextEditor: NSViewRepresentable {
         guard let textView = scrollView.documentView as? EndAnchoredTextView else { return }
         EditorCommandRouter.shared.register(textView)
         textView.onInteract = onInteract
+        textView.isCursorExcluded = isCursorExcluded
         context.coordinator.text = $text
         if textView.string != text {
             let selectedRanges = textView.selectedRanges
@@ -120,6 +123,7 @@ struct PlainTextEditor: NSViewRepresentable {
 // intermediate caret placement NSTextView would otherwise show there (which reads as a flicker).
 final class EndAnchoredTextView: NSTextView {
     var onInteract: (() -> Void)?
+    var isCursorExcluded: ((CGPoint) -> Bool)?
     private var isUpdatingExtent = false
     private var viewportObserver: NSObjectProtocol?
 
@@ -195,7 +199,7 @@ final class EndAnchoredTextView: NSTextView {
         if frame.origin != .zero { super.setFrameOrigin(.zero) }
         let clip = scroll.contentView
         let origin = NSPoint(x: max(0, min(savedOrigin.x, frame.width - clip.bounds.width)),
-                             y: max(0, min(savedOrigin.y, frame.height - clip.bounds.height)))
+                             y: max(-scroll.contentInsets.top, min(savedOrigin.y, frame.height - clip.bounds.height)))
         if origin != clip.bounds.origin {
             clip.scroll(to: origin)
             scroll.reflectScrolledClipView(clip)
@@ -217,6 +221,21 @@ final class EndAnchoredTextView: NSTextView {
             return
         }
         super.mouseDown(with: event)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        if isCursorExcluded?(event.locationInWindow) == true { NSCursor.arrow.set() }
+        else { super.mouseMoved(with: event) }
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        if isCursorExcluded?(event.locationInWindow) == true { NSCursor.arrow.set() }
+        else { super.mouseEntered(with: event) }
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        if isCursorExcluded?(event.locationInWindow) == true { NSCursor.arrow.set() }
+        else { super.cursorUpdate(with: event) }
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {
