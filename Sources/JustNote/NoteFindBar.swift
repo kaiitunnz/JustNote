@@ -139,7 +139,7 @@ final class NoteFindTextField: NSTextField {
     override func updateTrackingAreas() {
         if let cursorTrackingArea { removeTrackingArea(cursorTrackingArea) }
         super.updateTrackingAreas()
-        let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .cursorUpdate, .activeInKeyWindow, .inVisibleRect],
+        let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .mouseMoved, .cursorUpdate, .activeInKeyWindow, .inVisibleRect],
                                   owner: self, userInfo: nil)
         addTrackingArea(area)
         cursorTrackingArea = area
@@ -150,6 +150,12 @@ final class NoteFindTextField: NSTextField {
         addCursorRect(bounds, cursor: .iBeam)
     }
 
-    override func cursorUpdate(with event: NSEvent) { NSCursor.iBeam.set() }
-    override func mouseEntered(with event: NSEvent) { NSCursor.iBeam.set() }
+    override func cursorUpdate(with event: NSEvent) { updateCursor(for: event) }
+    override func mouseEntered(with event: NSEvent) { updateCursor(for: event) }
+    override func mouseMoved(with event: NSEvent) { updateCursor(for: event) }
+
+    private func updateCursor(for event: NSEvent) {
+        guard bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
+        NSCursor.iBeam.set()
+    }
 }

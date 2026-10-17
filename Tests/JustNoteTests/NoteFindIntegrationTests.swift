@@ -26,7 +26,36 @@ final class NoteFindIntegrationTests: XCTestCase {
                 NSCursor.iBeam.set()
                 view.mouseMoved(with: event)
                 XCTAssertTrue(NSCursor.current.isEqual(NSCursor.arrow))
-                field.cursorUpdate(with: event)
+                NSCursor.iBeam.set()
+                let entered = try XCTUnwrap(NSEvent.enterExitEvent(with: .mouseEntered, location: buttonPoint, modifierFlags: [],
+                                                                  timestamp: 0, windowNumber: window.windowNumber, context: nil,
+                                                                  eventNumber: 0, trackingNumber: 0, userData: nil))
+                view.mouseEntered(with: entered)
+                XCTAssertTrue(NSCursor.current.isEqual(NSCursor.arrow))
+                NSCursor.arrow.set()
+                let updated = try XCTUnwrap(NSEvent.enterExitEvent(with: .cursorUpdate, location: buttonPoint, modifierFlags: [],
+                                                                  timestamp: 0, windowNumber: window.windowNumber, context: nil,
+                                                                  eventNumber: 0, trackingNumber: 0, userData: nil))
+                view.cursorUpdate(with: updated)
+                XCTAssertTrue(NSCursor.current.isEqual(NSCursor.arrow), "Cursor updates must honor Find exclusions in \(mode)")
+                field.mouseMoved(with: event)
+                field.mouseEntered(with: entered)
+                field.cursorUpdate(with: updated)
+                XCTAssertTrue(NSCursor.current.isEqual(NSCursor.arrow), "The query field must not claim control cursors")
+                let fieldEvent = try XCTUnwrap(NSEvent.enterExitEvent(with: .cursorUpdate, location: fieldPoint, modifierFlags: [],
+                                                                     timestamp: 0, windowNumber: window.windowNumber, context: nil,
+                                                                     eventNumber: 0, trackingNumber: 0, userData: nil))
+                let fieldMove = try XCTUnwrap(NSEvent.mouseEvent(with: .mouseMoved, location: fieldPoint, modifierFlags: [],
+                                                               timestamp: 0, windowNumber: window.windowNumber, context: nil,
+                                                               eventNumber: 0, clickCount: 0, pressure: 0))
+                NSCursor.iBeam.set()
+                view.mouseMoved(with: fieldMove)
+                XCTAssertTrue(NSCursor.current.isEqual(NSCursor.iBeam), "The note movement cursor must yield to the query in \(mode)")
+                NSCursor.iBeam.set()
+                view.cursorUpdate(with: fieldEvent)
+                XCTAssertTrue(NSCursor.current.isEqual(NSCursor.iBeam), "The note cursor must yield to the query in \(mode)")
+                NSCursor.arrow.set()
+                field.cursorUpdate(with: fieldEvent)
                 XCTAssertTrue(NSCursor.current.isEqual(NSCursor.iBeam))
                 find.close()
                 XCTAssertFalse(find.excludesEditorCursor(at: buttonPoint))
