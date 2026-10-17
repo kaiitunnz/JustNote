@@ -27,8 +27,8 @@ settings:
 packages:
   MarkdownEngine:
     url: https://github.com/kaiitunnz/swift-markdown-engine.git
-    # Table viewport and overlay cursor patches on 0.10.0; pin the commit so editor behavior stays reproducible.
-    revision: 65edfdfb5689881e6906cdacb0f879883c0db014
+    # Table viewport patch on 0.10.0; pin the commit so editor behavior stays reproducible.
+    revision: 0f90305feb2ae6cf0cdb42548422e4008be36758
   KeyboardShortcuts:
     url: https://github.com/sindresorhus/KeyboardShortcuts.git
     # Exact-version pin (the .xcodeproj — and its Package.resolved — is git-ignored, so a

@@ -10,7 +10,6 @@ struct LiveMarkdownEditor: View {
     let fontSize: CGFloat
     var onInteract: (() -> Void)?
     var onRegister: ((NSTextView) -> Void)?
-    var isCursorExcluded: ((CGPoint) -> Bool)?
     var isInteractionExcluded: ((CGPoint) -> Bool)?
     @State private var codeBlocks: [CodeBlockSelection] = []
     @State private var copiedCodeBlockID: Int?
@@ -36,8 +35,7 @@ struct LiveMarkdownEditor: View {
                     return menu
                 },
                 onCodeBlockSelectionChange: { codeBlocks = $0 },
-                retainedScrollDocumentIds: Set(retainedDocumentIDs.map(\.uuidString)),
-                isCursorExcluded: isCursorExcluded
+                retainedScrollDocumentIds: Set(retainedDocumentIDs.map(\.uuidString))
             )
             .background(MarkdownInteractionMonitor(documentText: text, onInteract: onInteract, isExcluded: isInteractionExcluded))
             .background(MarkdownSemanticColorizer(documentText: text))

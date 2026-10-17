@@ -374,7 +374,6 @@ struct MenuView: View {
                             fontSize: fontSize,
                             onInteract: { model.collapseSelectionToPrimary() },
                             onRegister: { find.bind($0, noteID: note.id, mode: .markdown) },
-                            isCursorExcluded: { find.excludesEditorCursor(at: $0) },
                             isInteractionExcluded: { find.containsOverlay($0) }
                         )
                         .contentShape(Rectangle())
@@ -385,8 +384,7 @@ struct MenuView: View {
                             fontSize: fontSize,
                             // NSTextView eats clicks at the AppKit layer, so it collapses from its own mouseDown.
                             onInteract: { model.collapseSelectionToPrimary() },
-                            onRegister: { find.bind($0, noteID: note.id, mode: .plainText) },
-                            isCursorExcluded: { find.excludesEditorCursor(at: $0) }
+                            onRegister: { find.bind($0, noteID: note.id, mode: .plainText) }
                         )
                         .contentShape(Rectangle())
                         .onTapGesture { }  // Swallows editor taps so they don't fall through to the background collapse below.

@@ -25,24 +25,20 @@ struct NoteFindBar: View {
             Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
             NoteFindField(find: find)
                 .frame(minWidth: 30)
-                .pointerStyle(.horizontalText)
             Text(find.status)
                 .font(.system(size: 11).monospacedDigit())
                 .foregroundStyle(.secondary)
                 .fixedSize()
                 .accessibilityLabel(find.status)
             Button { find.move(backward: true) } label: { Image(systemName: "chevron.up") }
-                .pointerStyle(.default)
                 .disabled(find.matches.isEmpty)
                 .help("Previous match (⇧⌘G)")
                 .accessibilityLabel("Previous match")
             Button { find.move() } label: { Image(systemName: "chevron.down") }
-                .pointerStyle(.default)
                 .disabled(find.matches.isEmpty)
                 .help("Next match (⌘G)")
                 .accessibilityLabel("Next match")
             Button { find.close() } label: { Image(systemName: "xmark") }
-                .pointerStyle(.default)
                 .help("Close Find (Esc)")
                 .accessibilityLabel("Close Find")
         }
@@ -77,7 +73,7 @@ struct NoteFindField: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(find: find) }
 
     func makeNSView(context: Context) -> NSTextField {
-        let field = NoteFindTextField()
+        let field = NSTextField()
         field.placeholderString = "Find in note"
         field.setAccessibilityLabel("Find in note")
         field.focusRingType = .none
@@ -130,32 +126,5 @@ struct NoteFindField: NSViewRepresentable {
             }
             return false
         }
-    }
-}
-
-final class NoteFindTextField: NSTextField {
-    private var cursorTrackingArea: NSTrackingArea?
-
-    override func updateTrackingAreas() {
-        if let cursorTrackingArea { removeTrackingArea(cursorTrackingArea) }
-        super.updateTrackingAreas()
-        let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .mouseMoved, .cursorUpdate, .activeInKeyWindow, .inVisibleRect],
-                                  owner: self, userInfo: nil)
-        addTrackingArea(area)
-        cursorTrackingArea = area
-    }
-
-    override func resetCursorRects() {
-        super.resetCursorRects()
-        addCursorRect(bounds, cursor: .iBeam)
-    }
-
-    override func cursorUpdate(with event: NSEvent) { updateCursor(for: event) }
-    override func mouseEntered(with event: NSEvent) { updateCursor(for: event) }
-    override func mouseMoved(with event: NSEvent) { updateCursor(for: event) }
-
-    private func updateCursor(for event: NSEvent) {
-        guard bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
-        NSCursor.iBeam.set()
     }
 }

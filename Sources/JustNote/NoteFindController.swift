@@ -107,12 +107,6 @@ final class NoteFindController: ObservableObject {
         return overlayView.bounds.contains(overlayView.convert(windowPoint, from: nil))
     }
 
-    func excludesEditorCursor(at windowPoint: CGPoint) -> Bool {
-        guard containsOverlay(windowPoint) else { return false }
-        guard let searchField else { return true }
-        return !searchField.bounds.contains(searchField.convert(windowPoint, from: nil))
-    }
-
     func close(refocus: Bool = true) {
         revision += 1
         clearHighlights()
