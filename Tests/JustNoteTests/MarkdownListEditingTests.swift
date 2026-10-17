@@ -95,6 +95,24 @@ final class MarkdownListEditingTests: XCTestCase {
         }
     }
 
+    func testListCommandsResumeAfterNestedCodeBlock() throws {
+        let prefix = "- Parent\n  ```\n  8. Code\n\n"
+        try withEditor(prefix + "1. Alpha\n2. Beta\n3. Gamma") { state, _, window in
+            let view = try XCTUnwrap(state.view)
+            window.makeFirstResponder(view)
+            view.setSelectedRange(NSRange(location: NSMaxRange((view.string as NSString).range(of: "Beta")), length: 0))
+            view.doCommand(by: #selector(NSResponder.insertTab(_:)))
+            settle()
+            XCTAssertEqual(state.text, prefix + "1. Alpha\n\t1. Beta\n2. Gamma")
+            view.doCommand(by: #selector(NSResponder.insertBacktab(_:)))
+            settle()
+            XCTAssertEqual(state.text, prefix + "1. Alpha\n2. Beta\n3. Gamma")
+            view.doCommand(by: #selector(NSResponder.insertNewline(_:)))
+            settle()
+            XCTAssertEqual(state.text, prefix + "1. Alpha\n2. Beta\n3. \n4. Gamma")
+        }
+    }
+
     func testPlainTextTabKeepsLiteralEditingBehavior() throws {
         try withEditor("1. Alpha\n2. Beta", markdown: false) { state, _, window in
             let view = try XCTUnwrap(state.view)
