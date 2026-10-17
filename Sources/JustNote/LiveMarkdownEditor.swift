@@ -254,7 +254,7 @@ private struct CodeBlockCopyButton: View {
     }
 }
 
-private enum MarkdownPalette {
+enum MarkdownPalette {
     static let blue = color(light: 0x086DDD, dark: 0x2E80F2)
     static let pink = color(light: 0xC32B74, dark: 0xFF82B2)
     static let teal = color(light: 0x177E89, dark: 0x3EB4BF)
@@ -312,8 +312,7 @@ private struct MarkdownSemanticColorizer: NSViewRepresentable {
 
 private final class MarkdownSemanticColorizerView: NSView {
     private weak var textView: NSTextView?
-    private var observers: [NSObjectProtocol] = []
-    private var updateScheduled = false
+    private var styler: MarkdownSemanticStyler?
     private var documentText: String
 
     init(documentText: String) {
@@ -330,59 +329,37 @@ private final class MarkdownSemanticColorizerView: NSView {
         if window == nil {
             stopObserving()
         } else {
-            startObserving()
+            bindWhenReady()
         }
     }
 
-    deinit {
-        stopObserving()
-    }
-
     func stopObserving() {
-        observers.forEach(NotificationCenter.default.removeObserver)
-        observers.removeAll()
+        styler = nil
         textView = nil
-        updateScheduled = false
     }
 
     func updateDocumentText(_ documentText: String) {
         self.documentText = documentText
-        guard window != nil else { return }
-        rebindTextView()
-        scheduleUpdate()
+        bindWhenReady()
     }
 
-    private func startObserving() {
-        guard observers.isEmpty else { return }
-        guard rebindTextView() else {
-            DispatchQueue.main.async { [weak self] in
-                self?.startObserving()
-            }
-            return
-        }
-        scheduleUpdate()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-            self?.scheduleUpdate()
+    private func bindWhenReady() {
+        guard window != nil else { return }
+        if bindTextView() { return }
+        // The engine's hosting sibling may not have entered the window yet.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.window != nil else { return }
+            _ = self.bindTextView()
         }
     }
 
     @discardableResult
-    private func rebindTextView() -> Bool {
-        guard let textView = matchingTextView() else { return false }
-        guard self.textView !== textView || observers.isEmpty else { return true }
-
-        observers.forEach(NotificationCenter.default.removeObserver)
-        observers.removeAll()
+    private func bindTextView() -> Bool {
+        guard let textView = matchingTextView(), let storage = textView.textStorage else { return false }
+        guard self.textView !== textView || styler == nil else { return true }
+        styler = nil
         self.textView = textView
-        let center = NotificationCenter.default
-        observers = [
-            center.addObserver(forName: NSText.didChangeNotification, object: textView, queue: .main) { [weak self] _ in
-                self?.scheduleUpdate()
-            },
-            center.addObserver(forName: NSTextView.didChangeSelectionNotification, object: textView, queue: .main) { [weak self] _ in
-                self?.scheduleUpdate()
-            }
-        ]
+        styler = MarkdownSemanticStyler(storage: storage)
         return true
     }
 
@@ -393,179 +370,6 @@ private final class MarkdownSemanticColorizerView: NSView {
             $0.string.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n") == normalizedDocumentText
         } ?? (window?.firstResponder as? NSTextView) ?? textViews.first
     }
-
-    private func scheduleUpdate() {
-        guard !updateScheduled else { return }
-        updateScheduled = true
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.updateScheduled = false
-            self.colorMarkdown()
-        }
-    }
-
-    private func colorMarkdown() {
-        _ = rebindTextView()
-        guard let textView, let storage = textView.textStorage else { return }
-        let text = textView.string as NSString
-
-        storage.beginEditing()
-        defer { storage.endEditing() }
-
-        colorHeadings(in: text, storage: storage)
-        colorBlockquotes(in: storage)
-        colorMatches(Self.strongExpression, color: MarkdownPalette.pink, text: text, storage: storage, requiredTraits: .bold)
-        colorMatches(Self.emphasisExpression, color: MarkdownPalette.pink, text: text, storage: storage, requiredTraits: .italic)
-        colorMatches(Self.underscoreEmphasisExpression, color: MarkdownPalette.pink, text: text, storage: storage, requiredTraits: .italic)
-        colorMatches(Self.inlineCodeExpression, color: MarkdownPalette.purple, text: text, storage: storage, requiresMonospace: true, clearsBackground: true)
-    }
-
-    private func colorHeadings(in text: NSString, storage: NSTextStorage) {
-        var location = 0
-        while location < text.length {
-            let lineRange = text.lineRange(for: NSRange(location: location, length: 0))
-            let contentEnd = lineRange.location + lineRange.length - (text.substring(with: lineRange).hasSuffix("\n") ? 1 : 0)
-            var markerStart = lineRange.location
-            while markerStart < contentEnd, text.character(at: markerStart) == 0x20 || text.character(at: markerStart) == 0x09 {
-                markerStart += 1
-            }
-
-            var markerEnd = markerStart
-            while markerEnd < contentEnd, text.character(at: markerEnd) == 0x23 { markerEnd += 1 }
-            let markerCount = markerEnd - markerStart
-            let markerRange = NSRange(location: markerStart, length: markerCount)
-
-            if (1...6).contains(markerCount), isHiddenMarker(markerRange, storage: storage) {
-                var contentStart = markerEnd
-                while contentStart < contentEnd, text.character(at: contentStart) == 0x20 { contentStart += 1 }
-                if contentStart < contentEnd {
-                    applyForegroundColor(MarkdownPalette.headingColor(for: markerCount), to: NSRange(location: contentStart, length: contentEnd - contentStart), storage: storage)
-                }
-            }
-            location = lineRange.location + lineRange.length
-        }
-    }
-
-    private func colorBlockquotes(in storage: NSTextStorage) {
-        let range = NSRange(location: 0, length: storage.length)
-        storage.enumerateAttribute(Self.blockquoteLevel, in: range, options: []) { value, range, _ in
-            guard value != nil else { return }
-            applyForegroundColor(MarkdownPalette.teal, to: range, storage: storage)
-        }
-    }
-
-    private func colorMatches(
-        _ expression: NSRegularExpression,
-        color: NSColor,
-        text: NSString,
-        storage: NSTextStorage,
-        requiredTraits: NSFontDescriptor.SymbolicTraits? = nil,
-        requiresMonospace: Bool = false,
-        clearsBackground: Bool = false
-    ) {
-        let range = NSRange(location: 0, length: text.length)
-        expression.matches(in: text as String, range: range).forEach { match in
-            let contentRange = match.range(at: 2)
-            let openingMarker = match.range(at: 1)
-            let closingMarker = NSRange(location: NSMaxRange(match.range) - openingMarker.length, length: openingMarker.length)
-            guard
-                contentRange.location != NSNotFound,
-                isHiddenMarker(openingMarker, storage: storage),
-                isHiddenMarker(closingMarker, storage: storage),
-                requiredTraits.map({ rangeHasFontTraits(contentRange, traits: $0, storage: storage) }) ?? true,
-                !requiresMonospace || rangeHasMonospacedFont(contentRange, storage: storage)
-            else { return }
-            applyForegroundColor(color, to: contentRange, storage: storage)
-            // The engine fills inline `code` with the fenced-block background
-            // (a single shared color, no separate knob); that opaque box reads
-            // badly on inline spans, so strip it here. The hidden-marker guard
-            // above keeps this off fenced-block content, whose full-width fill
-            // depends on that background attribute staying put.
-            if clearsBackground {
-                clearBackground(in: contentRange, storage: storage)
-            }
-        }
-    }
-
-    private func clearBackground(in range: NSRange, storage: NSTextStorage) {
-        // Only strip where a background actually exists: removing a nonexistent
-        // attribute still marks the storage edited, and this runs on every caret
-        // move — a no-op edit invalidates TextKit 2 layout and snaps the viewport.
-        var spans: [NSRange] = []
-        storage.enumerateAttribute(.backgroundColor, in: range, options: []) { value, spanRange, _ in
-            if value != nil { spans.append(spanRange) }
-        }
-        for span in spans {
-            storage.removeAttribute(.backgroundColor, range: span)
-        }
-    }
-
-    private func applyForegroundColor(_ color: NSColor, to range: NSRange, storage: NSTextStorage) {
-        // Only write spans whose color actually differs. Re-adding an identical
-        // color still marks the storage edited, and this runs on every caret
-        // move — a doc-wide no-op edit invalidates TextKit 2 layout and snaps the
-        // viewport. Collect first, then apply: mutating .foregroundColor inside a
-        // .foregroundColor enumeration is undefined, so read within the .font walk.
-        var pending: [NSRange] = []
-        storage.enumerateAttribute(.font, in: range, options: []) { value, fontRange, _ in
-            guard let font = value as? NSFont, font.pointSize > 1 else { return }
-            var location = fontRange.location
-            let end = NSMaxRange(fontRange)
-            while location < end {
-                var effective = NSRange(location: 0, length: 0)
-                let current = storage.attribute(.foregroundColor, at: location, longestEffectiveRange: &effective, in: fontRange) as? NSColor
-                if current !== color { pending.append(effective) }
-                location = NSMaxRange(effective)
-            }
-        }
-        for span in pending {
-            storage.addAttribute(.foregroundColor, value: color, range: span)
-        }
-    }
-
-    private func isHiddenMarker(_ range: NSRange, storage: NSTextStorage) -> Bool {
-        guard range.length > 0 else { return false }
-        var isHidden = true
-        storage.enumerateAttribute(.font, in: range, options: []) { value, _, stop in
-            guard let font = value as? NSFont, font.pointSize <= 1 else {
-                isHidden = false
-                stop.pointee = true
-                return
-            }
-        }
-        return isHidden
-    }
-
-    private func rangeHasFontTraits(_ range: NSRange, traits: NSFontDescriptor.SymbolicTraits, storage: NSTextStorage) -> Bool {
-        guard range.length > 0 else { return false }
-        var hasTraits = true
-        var hasVisibleText = false
-        storage.enumerateAttribute(.font, in: range, options: []) { value, _, stop in
-            guard let font = value as? NSFont else {
-                hasTraits = false
-                stop.pointee = true
-                return
-            }
-            guard font.pointSize > 1 else { return }
-            hasVisibleText = true
-            guard font.fontDescriptor.symbolicTraits.contains(traits) else {
-                hasTraits = false
-                stop.pointee = true
-                return
-            }
-        }
-        return hasVisibleText && hasTraits
-    }
-
-    private func rangeHasMonospacedFont(_ range: NSRange, storage: NSTextStorage) -> Bool {
-        rangeHasFontTraits(range, traits: .monoSpace, storage: storage)
-    }
-
-    private static let blockquoteLevel = NSAttributedString.Key("BlockquoteLevel")
-    private static let strongExpression = try! NSRegularExpression(pattern: #"(?<!\\)(\*\*|__)(.+?)(?<!\\)\1"#)
-    private static let emphasisExpression = try! NSRegularExpression(pattern: #"(?<!\\)(?<!\*)(\*)(?!\*)([^*\n]+?)(?<!\\)\1(?!\*)"#)
-    private static let underscoreEmphasisExpression = try! NSRegularExpression(pattern: #"(?<!\\)(?<!_)(_)(?!_)([^_\n]+?)(?<!\\)\1(?!_)"#)
-    private static let inlineCodeExpression = try! NSRegularExpression(pattern: #"(?<!\\)(`)([^`\n]+)`"#)
 }
 
 enum MarkdownParagraphGapHitTest {

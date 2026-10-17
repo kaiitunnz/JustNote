@@ -23,8 +23,8 @@ xcodebuild -project JustNote.xcodeproj -scheme JustNote -configuration Debug -de
 xcodebuild test -project JustNote.xcodeproj -scheme JustNote -configuration Debug -derivedDataPath build -destination 'platform=macOS'
 ```
 
-The XCTest suite is **model-only** (injects a temp store) — it covers `NoteStore`/`AppModel`, not
-any window/panel/keyboard behavior. **GUI behavior must be verified by driving the running app**; see
+The XCTest suite covers the note model (with a temp store), panel geometry, syntax highlighting,
+and hosted Markdown editor styling and viewport behavior. **GUI behavior must also be verified by driving the running app**; see
 the `justnote-verify` skill in `.claude/skills/justnote-verify/`, which has the build/launch recipe
 and a CGEvent-based GUI-drive kit. Note that driving the app operates on the **real** user note store.
 
