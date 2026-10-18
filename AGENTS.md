@@ -76,7 +76,7 @@ hidden. Rationale, each a real dead end tried and rejected:
 
 ## Dependencies (pinned deliberately)
 
-- **MarkdownEngine** — exact revision of [kaiitunnz/swift-markdown-engine](https://github.com/kaiitunnz/swift-markdown-engine), based on 0.10.0 with table viewport and list editing patches. It supplies the editable TextKit 2 live-Markdown surface. Keep the revision in `project.yml` exact because the generated Xcode project and package resolution are ignored.
+- **MarkdownEngine** — exact revision of [kaiitunnz/swift-markdown-engine](https://github.com/kaiitunnz/swift-markdown-engine), based on 0.10.0 with table viewport, list editing, and closing-bracket patches. It supplies the editable TextKit 2 live-Markdown surface. Keep the revision in `project.yml` exact because the generated Xcode project and package resolution are ignored.
 - **KeyboardShortcuts** — `exactVersion` 1.9.4. Backed by Carbon `RegisterEventHotKey`, so the global
   shortcut needs **no Accessibility/Input-Monitoring prompt**. Pinned exactly because the `.xcodeproj`
   (and its `Package.resolved`) is git-ignored, so a range would let checkouts drift.
